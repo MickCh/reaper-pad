@@ -42,20 +42,34 @@ The defaults were made for the **Art AG-16T** (a generic DragonRise-based twin-s
 
 ## Installation
 
-### Pre-built release
+On Linux, reaper-pad uses the system SDL2 library: install `sdl2` (Arch: `sdl2-compat`; Debian/Ubuntu: `libsdl2-2.0-0`). The Windows build includes SDL2.
 
-Download the archive for your system from [Releases](https://github.com/MickCh/reaper-pad/releases) and copy the extension into REAPER's `UserPlugins` folder:
+### With ReaPack (recommended)
+
+[ReaPack](https://reapack.com) installs reaper-pad and keeps it up to date.
+
+1. In REAPER: **Extensions → ReaPack → Import repositories…**
+2. Paste this URL and confirm:
+   ```
+   https://github.com/MickCh/reaper-pad/raw/main/index.xml
+   ```
+3. **Extensions → ReaPack → Browse packages**, search for `reaper-pad`, right-click → **Install**, then **Apply**.
+4. Restart REAPER.
+
+About 2 seconds after startup the pad gives a short, gentle buzz: the extension is running. New versions show up in **Extensions → ReaPack → Synchronize packages**.
+
+### Manually
+
+Download the file for your system from [Releases](https://github.com/MickCh/reaper-pad/releases) and copy it into REAPER's `UserPlugins` folder, then restart REAPER:
 
 | System | File | Destination |
 |---|---|---|
-| Linux | `reaper_pad.so` | `~/.config/REAPER/UserPlugins/` |
-| Windows | `reaper_pad.dll` | `%APPDATA%\REAPER\UserPlugins\` |
+| Linux (x86_64) | `reaper_pad-x86_64.so` | `~/.config/REAPER/UserPlugins/` |
+| Windows (64-bit) | `reaper_pad-x64.dll` | `%APPDATA%\REAPER\UserPlugins\` |
 
-On Linux, the extension uses the system SDL2 library: install `sdl2` (Arch: `sdl2-compat`; Debian/Ubuntu: `libsdl2-2.0-0`). The Windows build includes SDL2.
+> **Tip:** with a portable REAPER install, use **Options → Show REAPER resource path in explorer/finder** to find the right folder.
 
-Restart REAPER. About 2 seconds after startup the pad gives a short, gentle buzz: the extension is running.
-
-> **Tip:** if you have a portable REAPER install, use `Options → Show REAPER resource path in explorer/finder` to find the right folder.
+> **Only one copy at a time.** Two copies of the extension in `UserPlugins` (e.g. a manual install next to the ReaPack one, or the old `reaper_pad.so` / `reaper_pad.dll` names) would each run every command, so every press would act twice. Keep a single file.
 
 ### From source
 
@@ -68,7 +82,7 @@ cd reaper-pad
 # .\install.ps1       # Windows (PowerShell); close REAPER first
 ```
 
-`install.sh` replaces the library atomically, so it is safe to run while REAPER is open. The new version loads after a restart.
+The scripts install under the same file name as the ReaPack package. `install.sh` replaces the library atomically, so it is safe to run while REAPER is open; the new version loads after a restart.
 
 ## Usage
 
@@ -155,7 +169,7 @@ cargo fmt --all
 
 The input logic (debounce, D-pad repeat, stick curves, rumble scheduling, config validation) is hardware-independent and unit-tested. SDL2 lives only in `pad.rs`, and REAPER calls only in `lib.rs` (behind the `Sink` trait).
 
-Pushing a tag `v*` builds Linux and Windows release archives through GitHub Actions.
+Pushing a tag `v*` (with a matching `## [x.y.z]` section in `CHANGELOG.md`) builds Linux and Windows releases through GitHub Actions and adds the version to the ReaPack index (`index.xml`, via `scripts/reapack_index.py`).
 
 ## Acknowledgements
 

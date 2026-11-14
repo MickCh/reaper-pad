@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<index version="1" name="reaper-pad">
+  <category name="Extensions">
+    <reapack name="reaper-pad.ext" type="extension" desc="reaper-pad: use a USB gamepad as a remote control for REAPER">
+      <metadata>
+        <link rel="website">https://github.com/MickCh/reaper-pad</link>
+      </metadata>
+      <version name="0.2.0" author="MickCh" time="2026-11-14T23:20:21Z">
+        <changelog>First public version.
+
+Added:
+- REAPER extension that calls the REAPER API directly (Linux and Windows).
+- Actions: *Reload configuration*, *Enable/disable gamepad*, *Button test (console)*.
+- Smooth horizontal zoom.
+- Variable-speed sticks, D-pad auto-repeat, contact-bounce filter.
+- Rumble on record start/stop and a gentle startup buzz.
+- Configuration validation with clear error messages.
+- Unit tests and CI for Linux and Windows.</changelog>
+        <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.2.0/reaper_pad-x64.dll</source>
+        <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.2.0/reaper_pad-x86_64.so</source>
+      </version>
+    </reapack>
+  </category>
+  <metadata>
+    <link rel="website" href="https://github.com/MickCh/reaper-pad">Website</link>
+  </metadata>
+</index>

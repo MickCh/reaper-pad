@@ -32,28 +32,31 @@ jobs:
         run: cargo test --release
       - name: Build
         run: cargo build --release
+      # The bare library (reaper_pad-<arch>.so/.dll) is what ReaPack downloads;
+      # the archive is for manual installation.
       - name: Package (Linux)
         if: runner.os == 'Linux'
         run: |
           name=reaper-pad-${GITHUB_REF_NAME}-${{ matrix.suffix }}
           mkdir -p dist/$name
-          cp target/release/libreaper_pad.so dist/$name/reaper_pad.so
-          cp config.toml README.md LICENSE dist/$name/
+          cp target/release/libreaper_pad.so dist/reaper_pad-x86_64.so
+          cp dist/reaper_pad-x86_64.so config.toml README.md LICENSE dist/$name/
           tar -C dist -czf dist/$name.tar.gz $name
+          rm -r dist/$name
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $name = "reaper-pad-$env:GITHUB_REF_NAME-${{ matrix.suffix }}"
           New-Item -ItemType Directory -Force -Path "dist\$name" | Out-Null
-          Copy-Item target\release\reaper_pad.dll, config.toml, README.md, LICENSE "dist\$name\"
+          Copy-Item target\release\reaper_pad.dll dist\reaper_pad-x64.dll
+          Copy-Item dist\reaper_pad-x64.dll, config.toml, README.md, LICENSE "dist\$name\"
           Compress-Archive -Path "dist\$name" -DestinationPath "dist\$name.zip"
+          Remove-Item -Recurse "dist\$name"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.suffix }}
-          path: |
-            dist/*.tar.gz
-            dist/*.zip
+          path: dist/*
 
   release:
     needs: build
@@ -67,3 +70,21 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+  # Publish the new version to ReaPack users by updating index.xml on main.
+  reapack-index:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - name: Add the release to index.xml
+        run: python3 scripts/reapack_index.py "${GITHUB_REF_NAME}"
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.xml
+          git commit -m "ReaPack index: ${GITHUB_REF_NAME}"
+          git push origin main
