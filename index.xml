@@ -19,6 +19,22 @@ Added:
         <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.2.0/reaper_pad-x64.dll</source>
         <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.2.0/reaper_pad-x86_64.so</source>
       </version>
+      <version name="0.3.0" author="MickCh" time="2026-11-14T23:55:05Z">
+        <changelog>Added:
+- ReaPack repository: install and update reaper-pad from REAPER
+  (`https://github.com/MickCh/reaper-pad/raw/main/index.xml`).
+- Digital-mode detection for DragonRise pads (Art AG-16T and clones): when
+  the LED is green the right stick presses buttons 1–4, so reaper-pad buzzes
+  three times, prints a warning in the REAPER console and ignores buttons
+  1–4 until the pad is back in analog mode. Option `detect_digital_mode`.
+
+Changed:
+- Library files are named by architecture (`reaper_pad-x86_64.so`,
+  `reaper_pad-x64.dll`), like other REAPER extensions. Remove an older
+  manually installed `reaper_pad.so` / `reaper_pad.dll`.</changelog>
+        <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.3.0/reaper_pad-x64.dll</source>
+        <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.3.0/reaper_pad-x86_64.so</source>
+      </version>
     </reapack>
   </category>
   <metadata>
