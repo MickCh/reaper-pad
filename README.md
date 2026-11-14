@@ -1,0 +1,169 @@
+# reaper-pad
+
+[![CI](https://github.com/MickCh/reaper-pad/actions/workflows/ci.yml/badge.svg)](https://github.com/MickCh/reaper-pad/actions/workflows/ci.yml)
+
+Use a cheap USB gamepad as a remote control for [REAPER](https://www.reaper.fm/).
+
+Start and stop recording with the guitar still on your lap, undo a bad take, drop markers, and scroll and zoom the arrange view with the analog sticks. The pad vibrates when recording really starts, so you don't need to look at the screen.
+
+reaper-pad is a REAPER extension: it loads together with REAPER and calls the REAPER API directly. Nothing else needs to run and nothing needs configuring in REAPER. It works on **Linux** and **Windows**.
+
+## Features
+
+- Any SDL2-compatible gamepad: generic DirectInput/HID pads as well as XInput controllers.
+- Buttons and D-pad mapped to transport commands or to **any REAPER action** by command ID.
+- Analog sticks with **variable speed**: a slight push moves slowly, full deflection moves fast. Horizontal zoom is **smooth**.
+- **Rumble feedback** when recording starts (one long pulse) and stops (two short pulses).
+- Contact-bounce filter for old, worn pads.
+- Works in the background while REAPER has focus.
+- Config errors are reported clearly (unknown commands, typos in option names) instead of being silently ignored.
+- reaper-pad catches its own internal errors: a bug in it disables the pad, not REAPER.
+
+## Default layout
+
+The defaults were made for the **Art AG-16T** (a generic DragonRise-based twin-stick pad). Button numbers match its printed labels. Other pads work too; see [Other gamepads](#other-gamepads).
+
+| Control | Function |
+|---|---|
+| **1** | Play / stop |
+| **2** | Record |
+| **3 / 4** | Undo / redo |
+| **5** | Metronome on/off |
+| **6** | Loop (repeat) on/off |
+| **7 / 8** | Previous / next marker |
+| **9** | Go to project start |
+| **10** | Insert marker |
+| **11** (left stick click) | Save project |
+| **12** (right stick click) | Insert new track |
+| **D-pad ↑ ↓** | Previous / next track |
+| **D-pad ← →** | Move cursor by one grid division (repeats while held) |
+| **Left stick** | Scroll (time / tracks) |
+| **Right stick** | Zoom (↔ time, smooth · ↕ track height) |
+
+## Installation
+
+### Pre-built release
+
+Download the archive for your system from [Releases](https://github.com/MickCh/reaper-pad/releases) and copy the extension into REAPER's `UserPlugins` folder:
+
+| System | File | Destination |
+|---|---|---|
+| Linux | `reaper_pad.so` | `~/.config/REAPER/UserPlugins/` |
+| Windows | `reaper_pad.dll` | `%APPDATA%\REAPER\UserPlugins\` |
+
+On Linux, the extension uses the system SDL2 library: install `sdl2` (Arch: `sdl2-compat`; Debian/Ubuntu: `libsdl2-2.0-0`). The Windows build includes SDL2.
+
+Restart REAPER. About 2 seconds after startup the pad gives a short, gentle buzz: the extension is running.
+
+> **Tip:** if you have a portable REAPER install, use `Options → Show REAPER resource path in explorer/finder` to find the right folder.
+
+### From source
+
+Requirements: Rust 1.88+, a C/C++ compiler (needed to build reaper-rs). On Linux you also need the SDL2 development files (`libsdl2-dev` on Debian/Ubuntu). On Windows, SDL2 is built from source, which requires CMake.
+
+```sh
+git clone https://github.com/MickCh/reaper-pad
+cd reaper-pad
+./install.sh          # Linux: builds and installs the extension
+# .\install.ps1       # Windows (PowerShell); close REAPER first
+```
+
+`install.sh` replaces the library atomically, so it is safe to run while REAPER is open. The new version loads after a restart.
+
+## Usage
+
+### Actions
+
+The extension adds these entries to REAPER's action list (**Actions → Show action list**, filter `reaper-pad`):
+
+| Action | What it does |
+|---|---|
+| **reaper-pad: Reload configuration** | Re-reads `reaper-pad.toml` without restarting REAPER. The pad buzzes to confirm. If the file has an error, a console window explains it and the previous settings stay active. |
+| **reaper-pad: Enable/disable gamepad** | Toggle. While disabled, the pad does nothing. |
+| **reaper-pad: Button test (console)** | Toggle. Shows button, axis and D-pad numbers in REAPER's console. While it is on, the pad doesn't control REAPER. |
+
+To put them in a menu or toolbar, use **Options → Customize menus/toolbars → Add…** and search for `reaper-pad`. On a toolbar, the toggles light up when active.
+
+### Configuration
+
+On first start, the extension writes the default configuration to `reaper-pad.toml` in REAPER's resource folder (Linux: `~/.config/REAPER/`, Windows: `%APPDATA%\REAPER\`). Edit it, then run **reaper-pad: Reload configuration**.
+
+The [default `config.toml`](config.toml) documents every option. In short:
+
+```toml
+[buttons]
+1 = "play_stop"
+2 = "record"
+7 = "action:40172"      # any REAPER action by command ID
+
+[dpad]
+up = "action:40286"
+repeat_ms = 250
+
+[sticks]
+left_x  = "scroll_x"
+right_x = "zoom_x"
+speed_right = 0.3       # slower zoom
+invert_left_y = true
+
+[pad]
+debounce_ms = 120
+rumble = true
+```
+
+**Button and D-pad commands:** `play_stop`, `play`, `stop`, `record`, `metronome`, `repeat`, `undo`, `redo`, `action:<id>`.
+
+**Stick commands:** `scroll_x`, `scroll_y`, `zoom_x`, `zoom_y`.
+
+To find an action's ID: in the action list, right-click an action → **Copy selected action command ID**. Only numeric IDs are supported for now.
+
+**Stick speed:** `min_steps_per_sec` and `max_steps_per_sec` set the speed at a slight and at full deflection. `speed_left` and `speed_right` scale each stick. `zoom_amount` sets how much one step of smooth horizontal zoom changes.
+
+### Other gamepads
+
+1. Run **reaper-pad: Button test (console)**.
+2. Press each button and move each stick. Note the numbers it prints.
+3. Adjust `[buttons]` and the `axis_*` options under `[pad]` accordingly.
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| Right stick acts like buttons 1–4 (e.g. starts playback) | The pad is in digital mode. Press its **Analog/Mode** button: on the Art AG-16T the LED turns from green (digital) to red (analog). Many pads fall back to digital mode after losing power. |
+| Nothing happens, no startup buzz | Start REAPER from a terminal (Linux) and look for `[reaper-pad]` lines. Check that the pad is visible to the system (`ls /dev/input/by-id/`). |
+| Pad is detected, but buttons do something else | Run the button test and fix `[buttons]`. |
+| One press triggers twice | Increase `debounce_ms`. |
+| Scrolling goes the wrong way | Use `invert_left_y` / `invert_right_y`. |
+| Error after editing the config | Run *Reload configuration*: the console window names the line and the problem. |
+
+## Development
+
+```
+src/lib.rs      REAPER side: entry point, actions, executing commands (reaper-rs)
+src/pad.rs      gamepad through SDL2: devices, events, rumble
+src/logic.rs    debounce, D-pad repeat, stick curves, rumble scheduling
+src/command.rs  bindable commands
+src/config.rs   configuration and validation
+config.toml     documented default configuration (embedded into the extension)
+```
+
+```sh
+cargo test                            # unit tests (no gamepad needed)
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all
+```
+
+The input logic (debounce, D-pad repeat, stick curves, rumble scheduling, config validation) is hardware-independent and unit-tested. SDL2 lives only in `pad.rs`, and REAPER calls only in `lib.rs` (behind the `Sink` trait).
+
+Pushing a tag `v*` builds Linux and Windows release archives through GitHub Actions.
+
+## Acknowledgements
+
+- [reaper-rs](https://github.com/helgoboss/reaper-rs) by Benjamin Klum: Rust bindings for the REAPER API
+- [SDL2](https://www.libsdl.org/) and the [sdl2](https://crates.io/crates/sdl2) crate: gamepad input and rumble
+
+REAPER is a trademark of Cockos Incorporated. This project is not affiliated with Cockos.
+
+## License
+
+[MIT](LICENSE)

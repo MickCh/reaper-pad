@@ -1,0 +1,61 @@
+# reaper-pad configuration
+#
+# Location: <REAPER resource path>/reaper-pad.toml
+#   (Linux: ~/.config/REAPER, Windows: %APPDATA%\REAPER). Created on first run.
+#   After editing, run the action "reaper-pad: Reload configuration".
+#
+# Button numbers are 1-based. On the Art AG-16T they match the printed labels
+# (1–10); 11 and 12 are the left and right stick clicks. For other gamepads,
+# use the action "reaper-pad: Button test (console)".
+#
+# Commands for buttons and the D-pad:
+#   play_stop, play, stop, record, metronome, repeat, undo, redo
+#   "action:<id>"   any REAPER action (Actions → Show action list → right-click →
+#                   "Copy selected action command ID")
+# Commands for sticks:
+#   scroll_x, scroll_y, zoom_x, zoom_y
+
+[buttons]
+1  = "play_stop"
+2  = "record"
+3  = "undo"
+4  = "redo"
+5  = "metronome"
+6  = "repeat"
+7  = "action:40172"   # Markers: Go to previous marker/project start
+8  = "action:40173"   # Markers: Go to next marker/project end
+9  = "action:40042"   # Transport: Go to start of project
+10 = "action:40157"   # Markers: Insert marker at current position
+11 = "action:40026"   # File: Save project
+12 = "action:40001"   # Track: Insert new track
+
+[dpad]
+up    = "action:40286"  # Track: Go to previous track
+down  = "action:40285"  # Track: Go to next track
+left  = "action:40646"  # View: Move cursor left to grid division
+right = "action:40647"  # View: Move cursor right to grid division
+repeat_ms = 250         # auto-repeat interval while held
+
+[sticks]
+left_x  = "scroll_x"    # left stick horizontal  → scroll in time
+left_y  = "scroll_y"    # left stick vertical    → scroll tracks
+right_x = "zoom_x"      # right stick horizontal → zoom in time (smooth)
+right_y = "zoom_y"      # right stick vertical   → track height
+deadzone = 0.15         # ignore small deflections (worn sticks rarely centre perfectly)
+min_steps_per_sec = 3   # speed at a slight deflection
+max_steps_per_sec = 40  # speed at full deflection
+speed_left = 1.0        # speed multiplier for the left stick (lower = slower)
+speed_right = 0.3       # speed multiplier for the right stick
+invert_left_y = true    # invert the vertical direction of the left stick
+invert_right_y = false  # invert the vertical direction of the right stick
+zoom_amount = 0.2       # smooth horizontal zoom: amount per stick step
+
+[pad]
+debounce_ms = 120       # ignore contact bounce (old pads may register 2–3 presses per click)
+rumble = true           # vibrate on startup and when recording starts/stops
+# Axis numbers as reported by SDL. Defaults fit most twin-stick pads;
+# on the Art AG-16T the mode LED must be red (analog), not green (digital).
+axis_left_x = 0
+axis_left_y = 1
+axis_right_x = 3
+axis_right_y = 4

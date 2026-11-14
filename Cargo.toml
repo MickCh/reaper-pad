@@ -1,0 +1,31 @@
+[package]
+name = "reaper-pad"
+description = "REAPER extension: use a USB gamepad as a remote control"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/MickCh/reaper-pad"
+publish = false
+
+[lib]
+# REAPER loads reaper_*.so / reaper_*.dll from its UserPlugins folder.
+name = "reaper_pad"
+crate-type = ["cdylib"]
+
+[dependencies]
+sdl2 = "0.38.0"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.2.1"
+# reaper-rs is used from git: the crates.io release (0.1.0) dates from 2020.
+reaper-low = { git = "https://github.com/helgoboss/reaper-rs", rev = "bd7cbb0b83f8f84c0f325557be0ca16bca458b14" }
+reaper-medium = { git = "https://github.com/helgoboss/reaper-rs", rev = "bd7cbb0b83f8f84c0f325557be0ca16bca458b14" }
+reaper-macros = { git = "https://github.com/helgoboss/reaper-rs", rev = "bd7cbb0b83f8f84c0f325557be0ca16bca458b14" }
+
+# On Windows, SDL2 is built from source and linked statically: no extra DLLs.
+[target.'cfg(windows)'.dependencies]
+sdl2 = { version = "0.38.0", features = ["bundled", "static-link"] }
+
+[profile.release]
+strip = true
+lto = true
