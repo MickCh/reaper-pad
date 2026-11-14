@@ -1,0 +1,5 @@
+[env]
+# The SDL2 sources bundled with sdl2-sys (built on Windows) declare an old
+# cmake_minimum_required that CMake 4 rejects. Ignored where SDL2 comes from
+# the system (Linux).
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
