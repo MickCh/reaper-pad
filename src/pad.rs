@@ -4,13 +4,17 @@
 use crate::command::{Command, StickCommand};
 use crate::config::{Axis, Config};
 use crate::logic::{
-    AxisTracker, Debouncer, Direction, HatRepeat, Pattern, RUMBLE_START, RUMBLE_STOP, RumbleQueue,
+    AxisTracker, Debouncer, Direction, HatRepeat, ModeDetector, Pattern, RUMBLE_DIGITAL,
+    RUMBLE_START, RUMBLE_STOP, RumbleQueue,
 };
 use sdl2::event::Event;
 use sdl2::joystick::{HatState, Joystick};
 use sdl2::{EventPump, JoystickSubsystem, Sdl};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+
+/// USB vendor of DragonRise pads (Art AG-16T and many cheap clones).
+const DRAGONRISE_VENDOR: u16 = 0x0079;
 
 /// Receives what the pad does. Implemented by the REAPER side; keeps this
 /// module free of REAPER calls.
@@ -26,6 +30,10 @@ pub trait Sink {
     }
     /// Status and diagnostic messages.
     fn log(&mut self, msg: &str);
+    /// Something the user has to act on: always shown.
+    fn notice(&mut self, msg: &str) {
+        self.log(msg);
+    }
 }
 
 pub struct Pad {
@@ -41,6 +49,7 @@ pub struct Pad {
     last_tick: Instant,
     recording: Option<bool>,
     rumble: RumbleQueue,
+    mode: ModeDetector,
     _sdl: Sdl,
 }
 
@@ -65,6 +74,7 @@ impl Pad {
             last_tick: Instant::now(),
             recording: None,
             rumble: RumbleQueue::default(),
+            mode: ModeDetector::default(),
             _sdl: sdl,
         })
     }
@@ -76,6 +86,7 @@ impl Pad {
         self.hat
             .set_interval(Duration::from_millis(cfg.dpad.repeat_ms));
         self.axes.clear();
+        self.mode.reset();
         self.cfg = cfg;
     }
 
@@ -127,6 +138,7 @@ impl Pad {
                         self.axes.clear();
                         self.hat.set((0, 0), now);
                         self.rumble.clear();
+                        self.mode.reset();
                     }
                 }
                 Event::JoyButtonDown { button_idx, .. } if self.test_mode => {
@@ -150,6 +162,8 @@ impl Pad {
                 _ => {}
             }
         }
+
+        self.check_mode(now, sink);
 
         let dt = now.duration_since(self.last_tick).as_secs_f32().min(0.1);
         self.last_tick = now;
@@ -185,9 +199,36 @@ impl Pad {
         self.recording = Some(on);
     }
 
+    /// Watch for the digital mode of DragonRise pads (see [`ModeDetector`]).
+    fn check_mode(&mut self, now: Instant, sink: &mut dyn Sink) {
+        let Some(joy) = self.joy.as_ref() else { return };
+        if !self.cfg.pad.detect_digital_mode || vendor(joy) != Some(DRAGONRISE_VENDOR) {
+            return;
+        }
+        let x = joy.axis(self.cfg.pad.axis_right_x).unwrap_or(0);
+        let y = joy.axis(self.cfg.pad.axis_right_y).unwrap_or(0);
+        match self.mode.update(x, y, now) {
+            Some(true) => {
+                sink.notice(
+                    "Gamepad is in DIGITAL mode (LED green): the right stick would press \
+                     buttons 1–4, so they are ignored. Press the Analog button (LED red).",
+                );
+                self.rumble(RUMBLE_DIGITAL);
+            }
+            Some(false) => sink.notice("Gamepad is in analog mode — buttons 1–4 work again."),
+            None => {}
+        }
+    }
+
     fn button(&mut self, idx: u8, now: Instant, sink: &mut dyn Sink) {
         let num = idx as u32 + 1; // number as printed on the pad
         if !self.debouncer.accept(num, now) {
+            return;
+        }
+        if self.mode.digital() && (1..=4).contains(&num) {
+            sink.log(&format!(
+                "[{num}] ignored — digital mode (press Analog, LED red)"
+            ));
             return;
         }
         match self.cfg.button(num) {
@@ -236,6 +277,14 @@ impl Pad {
             }
         }
     }
+}
+
+/// USB vendor ID from SDL's joystick GUID (bytes 4–5, little endian), if the
+/// GUID carries one.
+fn vendor(joy: &Joystick) -> Option<u16> {
+    let g = joy.guid().raw().data;
+    let v = u16::from_le_bytes([g[4], g[5]]);
+    (v != 0 && g[6] == 0 && g[7] == 0).then_some(v)
 }
 
 fn hat_xy(h: HatState) -> (i8, i8) {

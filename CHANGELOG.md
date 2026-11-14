@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - ReaPack repository: install and update reaper-pad from REAPER
   (`https://github.com/MickCh/reaper-pad/raw/main/index.xml`).
+- Digital-mode detection for DragonRise pads (Art AG-16T and clones): when
+  the LED is green the right stick presses buttons 1–4, so reaper-pad buzzes
+  three times, prints a warning in the REAPER console and ignores buttons
+  1–4 until the pad is back in analog mode. Option `detect_digital_mode`.
 
 ### Changed
 - Library files are named by architecture (`reaper_pad-x86_64.so`,

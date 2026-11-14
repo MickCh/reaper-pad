@@ -53,6 +53,10 @@ zoom_amount = 0.2       # smooth horizontal zoom: amount per stick step
 [pad]
 debounce_ms = 120       # ignore contact bounce (old pads may register 2–3 presses per click)
 rumble = true           # vibrate on startup and when recording starts/stops
+# DragonRise pads (e.g. Art AG-16T) only: notice the digital mode (LED green),
+# where the right stick presses buttons 1–4. Buzzes three times, prints a
+# warning and ignores buttons 1–4 until the Analog button is pressed (LED red).
+detect_digital_mode = true
 # Axis numbers as reported by SDL. Defaults fit most twin-stick pads;
 # on the Art AG-16T the mode LED must be red (analog), not green (digital).
 axis_left_x = 0

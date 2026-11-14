@@ -184,6 +184,13 @@ pub const RUMBLE_STOP: Pattern = &[(false, 0.8, 120, 100), (false, 0.8, 120, 0)]
 /// Short, gentle "hello"/confirmation.
 pub const RUMBLE_HELLO: Pattern = &[(false, 1.0, 120, 0)];
 
+/// Three short buzzes: the pad is in digital mode.
+pub const RUMBLE_DIGITAL: Pattern = &[
+    (false, 1.0, 90, 110),
+    (false, 1.0, 90, 110),
+    (false, 1.0, 90, 0),
+];
+
 /// One motor command: (strong motor, weak motor, duration ms). (0, 0) = stop.
 pub type MotorCmd = (u16, u16, u32);
 
@@ -234,6 +241,50 @@ impl RumbleQueue {
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+}
+
+/// Detects the "digital" mode of DragonRise pads (Art AG-16T and clones;
+/// LED green instead of red). In that mode the right stick is reported as
+/// buttons 1–4 and its axes freeze just below the centre (raw 127 of 0–255,
+/// SDL value -129), while in analog mode they rest just above it (raw 128).
+/// Both right axes have to sit at the same such value for [`Self::HOLD`]
+/// before the pad counts as digital; any other value means analog again.
+#[derive(Debug, Default)]
+pub struct ModeDetector {
+    candidate_since: Option<Instant>,
+    digital: bool,
+}
+
+impl ModeDetector {
+    pub const HOLD: Duration = Duration::from_millis(500);
+
+    fn looks_digital(x: i16, y: i16) -> bool {
+        x == y && (-1024..0).contains(&x)
+    }
+
+    /// Feed the current right-stick axis values; returns the new mode
+    /// (`true` = digital) when it changes.
+    pub fn update(&mut self, x: i16, y: i16, now: Instant) -> Option<bool> {
+        let digital = if Self::looks_digital(x, y) {
+            let since = *self.candidate_since.get_or_insert(now);
+            self.digital || now.duration_since(since) >= Self::HOLD
+        } else {
+            self.candidate_since = None;
+            false
+        };
+        (digital != self.digital).then(|| {
+            self.digital = digital;
+            digital
+        })
+    }
+
+    pub fn digital(&self) -> bool {
+        self.digital
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
     }
 }
 
@@ -368,5 +419,37 @@ mod tests {
         // host froze for 5 s
         assert_eq!(q.due(t0 + ms(5000)), vec![(0, 0, 0)]);
         assert!(q.is_empty());
+    }
+
+    #[test]
+    fn mode_detector_needs_a_steady_digital_signature() {
+        let t0 = Instant::now();
+        let mut m = ModeDetector::default();
+        assert_eq!(m.update(128, 128, t0), None, "analog at rest");
+        assert_eq!(m.update(-129, -129, t0 + ms(100)), None);
+        assert_eq!(m.update(-129, -129, t0 + ms(400)), None, "not long enough");
+        assert_eq!(m.update(-129, -129, t0 + ms(600)), Some(true));
+        assert!(m.digital());
+        assert_eq!(m.update(-129, -129, t0 + ms(5000)), None);
+        assert_eq!(
+            m.update(128, 128, t0 + ms(5100)),
+            Some(false),
+            "LED red again"
+        );
+        assert!(!m.digital());
+    }
+
+    #[test]
+    fn mode_detector_ignores_a_moving_stick() {
+        let t0 = Instant::now();
+        let mut m = ModeDetector::default();
+        for i in 0..40u64 {
+            // passes through equal negative values, but never for long
+            let v = -200 + (i as i16 % 3) * 50;
+            assert_eq!(m.update(v, v - (i % 2) as i16, t0 + ms(i * 33)), None);
+        }
+        assert_eq!(m.update(-129, -5000, t0 + ms(2000)), None, "axes differ");
+        assert_eq!(m.update(-20000, -20000, t0 + ms(3000)), None, "deflected");
+        assert_eq!(m.update(-20000, -20000, t0 + ms(4000)), None);
     }
 }

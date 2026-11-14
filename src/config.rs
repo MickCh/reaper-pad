@@ -96,6 +96,9 @@ pub struct PadCfg {
     pub debounce_ms: u64,
     /// Vibrate when recording starts/stops and on startup.
     pub rumble: bool,
+    /// Warn about (and ignore buttons 1–4 in) the digital mode of DragonRise
+    /// pads such as the Art AG-16T.
+    pub detect_digital_mode: bool,
     pub axis_left_x: u32,
     pub axis_left_y: u32,
     pub axis_right_x: u32,
@@ -107,6 +110,7 @@ impl Default for PadCfg {
         PadCfg {
             debounce_ms: 120,
             rumble: true,
+            detect_digital_mode: true,
             axis_left_x: 0,
             axis_left_y: 1,
             axis_right_x: 3,

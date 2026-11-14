@@ -98,6 +98,11 @@ impl Sink for ReaperSink {
             eprintln!("[reaper-pad] {msg}");
         }
     }
+
+    fn notice(&mut self, msg: &str) {
+        eprintln!("[reaper-pad] {msg}");
+        self.reaper.show_console_msg(format!("reaper-pad: {msg}\n"));
+    }
 }
 
 /// While disabled: events are consumed but do nothing.

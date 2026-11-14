@@ -144,6 +144,7 @@ To find an action's ID: in the action list, right-click an action → **Copy sel
 | Problem | Solution |
 |---|---|
 | Right stick acts like buttons 1–4 (e.g. starts playback) | The pad is in digital mode. Press its **Analog/Mode** button: on the Art AG-16T the LED turns from green (digital) to red (analog). Many pads fall back to digital mode after losing power. |
+| Three short buzzes and *“Gamepad is in DIGITAL mode”* in the console | reaper-pad noticed the digital mode of a DragonRise pad (Art AG-16T and clones) and ignores buttons 1–4 until you press **Analog** (LED red). Turn this off with `detect_digital_mode = false` in `[pad]`. |
 | Nothing happens, no startup buzz | Start REAPER from a terminal (Linux) and look for `[reaper-pad]` lines. Check that the pad is visible to the system (`ls /dev/input/by-id/`). |
 | Pad is detected, but buttons do something else | Run the button test and fix `[buttons]`. |
 | One press triggers twice | Increase `debounce_ms`. |
