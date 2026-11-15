@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-15
+
+### Changed
+- Internal clean-up, no change in behaviour: command names and REAPER
+  action IDs are checked at compile time, typed errors for invalid
+  commands, rumble feedback separated from input handling.
+
 ## [0.4.1] - 2026-11-15
 
 ### Changed
