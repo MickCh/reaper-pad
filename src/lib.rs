@@ -295,15 +295,31 @@ extern "C" fn at_exit() {
 // ---------------------------------------------------------------------------
 // Actions
 
+/// The command IDs REAPER assigned to this plugin's actions.
 struct Ids {
     reload: CommandId,
     toggle: CommandId,
     test: CommandId,
 }
 
+impl Ids {
+    /// Which of this plugin's actions a command ID is, if any.
+    fn action(&self, id: CommandId) -> Option<Action> {
+        if id == self.reload {
+            Some(Action::Reload)
+        } else if id == self.toggle {
+            Some(Action::Toggle)
+        } else if id == self.test {
+            Some(Action::Test)
+        } else {
+            None
+        }
+    }
+}
+
 static IDS: OnceLock<Ids> = OnceLock::new();
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
     Reload,
     Toggle,
@@ -312,16 +328,7 @@ enum Action {
 
 impl Action {
     fn from_id(id: CommandId) -> Option<Self> {
-        let ids = IDS.get()?;
-        if id == ids.reload {
-            Some(Action::Reload)
-        } else if id == ids.toggle {
-            Some(Action::Toggle)
-        } else if id == ids.test {
-            Some(Action::Test)
-        } else {
-            None
-        }
+        IDS.get()?.action(id)
     }
 
     fn run(self) {
@@ -344,10 +351,10 @@ fn reload() {
             return;
         }
     };
-    let mut cfg = Some(cfg);
-    let reloaded = with_state(|s| match s.as_mut() {
+    // Without a state (startup failed), `cfg` is dropped: it is loaded
+    // again below, together with the rest of the state.
+    let reloaded = with_state(move |s| match s.as_mut() {
         Some(st) => {
-            let cfg = cfg.take().expect("config");
             st.sink.zoom_amount = cfg.sticks.zoom_amount;
             st.pad.set_config(cfg);
             st.pad.rumble(RUMBLE_HELLO); // confirmation
@@ -443,12 +450,10 @@ impl ToggleAction for Actions {
         // Read from the copy, not the state: this may be called from inside
         // `poll`, while the state is in use.
         let toggles = TOGGLES.get();
-        let on = if command_id == ids.toggle {
-            toggles.enabled
-        } else if command_id == ids.test {
-            toggles.test
-        } else {
-            return ToggleActionResult::NotRelevant;
+        let on = match ids.action(command_id) {
+            Some(Action::Toggle) => toggles.enabled,
+            Some(Action::Test) => toggles.test,
+            Some(Action::Reload) | None => return ToggleActionResult::NotRelevant,
         };
         if on {
             ToggleActionResult::On
@@ -505,4 +510,22 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
     // the gamepad is shut down in `at_exit`.
     Box::leak(Box::new(session));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_ids_map_to_actions() {
+        let ids = Ids {
+            reload: CommandId::new(1000),
+            toggle: CommandId::new(1001),
+            test: CommandId::new(1002),
+        };
+        assert_eq!(ids.action(CommandId::new(1000)), Some(Action::Reload));
+        assert_eq!(ids.action(CommandId::new(1001)), Some(Action::Toggle));
+        assert_eq!(ids.action(CommandId::new(1002)), Some(Action::Test));
+        assert_eq!(ids.action(CommandId::new(40044)), None, "a REAPER action");
+    }
 }
