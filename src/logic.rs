@@ -140,7 +140,7 @@ impl AxisParams {
         let rate = (self.min_steps_per_sec
             + (self.max_steps_per_sec - self.min_steps_per_sec) * mag * mag)
             * self.speed;
-        let sign = if (v > 0.0) != self.flip { 1.0 } else { -1.0 };
+        let sign = if (v > 0.0) == self.flip { -1.0 } else { 1.0 };
         sign * rate
     }
 }
@@ -160,22 +160,24 @@ impl AxisTracker {
             self.dir = 0;
             return None;
         }
-        let dir = rate.signum() as i8;
-        if dir != self.dir {
-            self.dir = dir;
-            Some(dir as f32)
-        } else {
+        let dir: i8 = if rate > 0.0 { 1 } else { -1 };
+        if dir == self.dir {
             Some(rate * dt)
+        } else {
+            self.dir = dir;
+            Some(f32::from(dir))
         }
     }
 }
 
 /// Accumulates fractional deltas into whole steps, for targets that only
-/// understand ±1 (REAPER's CSurf scroll/zoom).
+/// understand ±1 (REAPER's `CSurf_OnScroll` / `CSurf_OnZoom`).
 #[derive(Debug, Default)]
 pub struct Stepper(HashMap<StickCommand, f32>);
 
 impl Stepper {
+    // The result is a whole number of steps per tick: far inside i32.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn steps(&mut self, key: StickCommand, delta: f32) -> i32 {
         let acc = self.0.entry(key).or_insert(0.0);
         if *acc * delta < 0.0 {
@@ -223,12 +225,14 @@ impl RumbleQueue {
     pub fn schedule(&mut self, pattern: Pattern, start: Instant) {
         let mut t = start;
         for &(strong, level, ms, pause) in pattern {
+            // Clamped to 0..=65535 first, so the cast is exact up to rounding.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let v = (level.clamp(0.0, 1.0) * 65535.0) as u16;
             let (lo, hi) = if strong { (v, 0) } else { (0, v) };
             self.entries.push((t, (lo, hi, ms)));
-            t += Duration::from_millis(ms as u64);
+            t += Duration::from_millis(u64::from(ms));
             self.entries.push((t, (0, 0, 0)));
-            t += Duration::from_millis(pause as u64);
+            t += Duration::from_millis(u64::from(pause));
         }
     }
 

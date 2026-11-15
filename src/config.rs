@@ -211,8 +211,8 @@ impl Default for RawSticks {
 impl RawSticks {
     fn resolve(self) -> Sticks {
         Sticks {
-            left: self.left.or(Stick::default_for(0, 1)),
-            right: self.right.or(Stick::default_for(3, 4)),
+            left: self.left.or(&Stick::default_for(0, 1)),
+            right: self.right.or(&Stick::default_for(3, 4)),
             deadzone: self.deadzone,
             min_steps_per_sec: self.min_steps_per_sec,
             max_steps_per_sec: self.max_steps_per_sec,
@@ -234,7 +234,7 @@ struct RawStick {
 }
 
 impl RawStick {
-    fn or(self, d: Stick) -> Stick {
+    fn or(self, d: &Stick) -> Stick {
         Stick {
             x: self.x.or(d.x),
             y: self.y.or(d.y),
@@ -294,8 +294,8 @@ impl Config {
     }
 
     /// Command for a button number as printed on the pad (1-based).
-    pub fn button(&self, num: u32) -> Option<&Command> {
-        self.buttons.get(&num)
+    pub fn button(&self, num: u32) -> Option<Command> {
+        self.buttons.get(&num).copied()
     }
 
     /// The stick an axis belongs to, and whether it is the vertical one.
@@ -309,9 +309,9 @@ impl Config {
         }
     }
 
-    pub fn stick_command(&self, axis: Axis) -> Option<&StickCommand> {
+    pub fn stick_command(&self, axis: Axis) -> Option<StickCommand> {
         let (st, vertical) = self.stick(axis);
-        if vertical { &st.y } else { &st.x }.as_ref()
+        if vertical { st.y } else { st.x }
     }
 
     /// Hardware axis index for a stick axis.
@@ -377,11 +377,11 @@ mod tests {
     #[test]
     fn default_config_is_valid() {
         let c = Config::parse(DEFAULT_CONFIG).unwrap();
-        assert_eq!(c.button(1), Some(&Command::PlayStop));
-        assert_eq!(c.button(2), Some(&Command::Record));
+        assert_eq!(c.button(1), Some(Command::PlayStop));
+        assert_eq!(c.button(2), Some(Command::Record));
         assert_eq!(c.buttons.len(), 12);
         assert_eq!(c.button(13), None);
-        assert_eq!(c.stick_command(Axis::RightX), Some(&StickCommand::ZoomX));
+        assert_eq!(c.stick_command(Axis::RightX), Some(StickCommand::ZoomX));
         assert!(c.dpad.up.is_some() && c.dpad.right.is_some());
     }
 
@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn stick_settings_fall_back_to_their_side() {
         let c = Config::parse("[sticks.right]\ny = \"zoom_y\"\naxis_x = 2\n").unwrap();
-        assert_eq!(c.stick_command(Axis::RightY), Some(&StickCommand::ZoomY));
+        assert_eq!(c.stick_command(Axis::RightY), Some(StickCommand::ZoomY));
         assert_eq!(c.stick_command(Axis::RightX), None);
         assert_eq!(c.axis_index(Axis::RightX), 2);
         assert_eq!(c.axis_index(Axis::RightY), 4, "right default");
@@ -512,9 +512,9 @@ mod tests {
     #[test]
     fn default_config_layout() {
         let c = Config::parse(DEFAULT_CONFIG).unwrap();
-        assert_eq!(c.stick_command(Axis::LeftX), Some(&StickCommand::ScrollX));
-        assert_eq!(c.stick_command(Axis::LeftY), Some(&StickCommand::ScrollY));
-        assert_eq!(c.stick_command(Axis::RightY), Some(&StickCommand::ZoomY));
+        assert_eq!(c.stick_command(Axis::LeftX), Some(StickCommand::ScrollX));
+        assert_eq!(c.stick_command(Axis::LeftY), Some(StickCommand::ScrollY));
+        assert_eq!(c.stick_command(Axis::RightY), Some(StickCommand::ZoomY));
         assert!(!c.axis_params(Axis::LeftY).flip, "left Y inverted");
         assert_eq!(c.axis_params(Axis::RightX).speed, 0.3);
         assert_eq!(c.axis_index(Axis::RightY), 4);

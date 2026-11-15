@@ -72,15 +72,14 @@ impl FromStr for Command {
         if let Some((_, cmd, _)) = NAMED.iter().find(|(n, _, _)| *n == s) {
             return Ok(*cmd);
         }
-        match s.split_once(':') {
-            Some(("action", id)) => Ok(Command::Action(parse_action_id(s, id)?)),
-            _ => {
-                let help: Vec<_> = NAMED.iter().map(|(n, _, _)| *n).collect();
-                Err(format!(
-                    "unknown command \"{s}\" (expected one of: {}, action:<id>)",
-                    help.join(", ")
-                ))
-            }
+        if let Some(("action", id)) = s.split_once(':') {
+            Ok(Command::Action(parse_action_id(s, id)?))
+        } else {
+            let help: Vec<_> = NAMED.iter().map(|(n, _, _)| *n).collect();
+            Err(format!(
+                "unknown command \"{s}\" (expected one of: {}, action:<id>)",
+                help.join(", ")
+            ))
         }
     }
 }

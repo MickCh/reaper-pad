@@ -26,10 +26,10 @@ pub trait Log {
 /// input handling free of REAPER calls.
 pub trait Sink: Log {
     /// A button or D-pad command.
-    fn command(&mut self, cmd: &Command);
+    fn command(&mut self, cmd: Command);
     /// Stick movement: a fractional number of "steps" since the last call;
     /// the sign is the direction. A fresh deflection starts with exactly ±1.
-    fn stick(&mut self, cmd: &StickCommand, delta: f32);
+    fn stick(&mut self, cmd: StickCommand, delta: f32);
     /// Whether REAPER is recording right now (`None` = unknown).
     fn recording(&mut self) -> Option<bool> {
         None
@@ -250,7 +250,7 @@ impl Router {
                 Direction::Left => &d.left,
                 Direction::Right => &d.right,
             };
-            if let Some(cmd) = cmd {
+            if let Some(cmd) = *cmd {
                 sink.command(cmd);
             }
         }
@@ -281,17 +281,17 @@ impl Router {
 
 /// D-pad position for the button test, e.g. "left-up".
 fn hat_name((x, y): (i8, i8)) -> String {
-    let v = match y {
+    let vertical = match y {
         1 => Some("up"),
         -1 => Some("down"),
         _ => None,
     };
-    let h = match x {
+    let horizontal = match x {
         -1 => Some("left"),
         1 => Some("right"),
         _ => None,
     };
-    match (h, v) {
+    match (horizontal, vertical) {
         (Some(h), Some(v)) => format!("{h}-{v}"),
         (Some(d), None) | (None, Some(d)) => d.into(),
         (None, None) => "centred".into(),
@@ -349,11 +349,11 @@ mod tests {
     }
 
     impl Sink for TestSink {
-        fn command(&mut self, cmd: &Command) {
-            self.out.push(Out::Cmd(*cmd));
+        fn command(&mut self, cmd: Command) {
+            self.out.push(Out::Cmd(cmd));
         }
-        fn stick(&mut self, cmd: &StickCommand, delta: f32) {
-            self.out.push(Out::Stick(*cmd, delta));
+        fn stick(&mut self, cmd: StickCommand, delta: f32) {
+            self.out.push(Out::Stick(cmd, delta));
         }
         fn recording(&mut self) -> Option<bool> {
             self.recording

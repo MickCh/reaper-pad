@@ -63,7 +63,7 @@ impl Pad {
 
     /// Name of the connected pad, if any.
     pub fn connected(&self) -> Option<String> {
-        self.joy.as_ref().map(|j| j.name())
+        self.joy.as_ref().map(Joystick::name)
     }
 
     /// Open the first available pad (if any).

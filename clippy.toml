@@ -1,0 +1,2 @@
+# "DragonRise" is a vendor name, not code.
+doc-valid-idents = ["DragonRise", ".."]

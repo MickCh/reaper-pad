@@ -58,7 +58,7 @@ struct ReaperSink {
 }
 
 impl Sink for ReaperSink {
-    fn command(&mut self, cmd: &Command) {
+    fn command(&mut self, cmd: Command) {
         self.reaper.main_on_command_ex(
             CommandId::new(cmd.reaper_action_id()),
             0,
@@ -66,10 +66,10 @@ impl Sink for ReaperSink {
         );
     }
 
-    fn stick(&mut self, cmd: &StickCommand, delta: f32) {
+    fn stick(&mut self, cmd: StickCommand, delta: f32) {
         let low = self.reaper.low();
         // Everything except ZoomX only moves in whole steps.
-        let mut steps = || match self.stepper.steps(*cmd, delta) {
+        let mut steps = || match self.stepper.steps(cmd, delta) {
             0 => None,
             n => Some(n),
         };
@@ -123,8 +123,8 @@ impl Log for ReaperSink {
 struct NullSink;
 
 impl Sink for NullSink {
-    fn command(&mut self, _: &Command) {}
-    fn stick(&mut self, _: &StickCommand, _: f32) {}
+    fn command(&mut self, _: Command) {}
+    fn stick(&mut self, _: StickCommand, _: f32) {}
 }
 
 impl Log for NullSink {
@@ -174,16 +174,11 @@ fn with_state<R>(f: impl FnOnce(&mut Option<State>) -> R) -> Option<R> {
     let result = catch_unwind(AssertUnwindSafe(|| {
         STATE.with(|s| s.try_borrow_mut().ok().map(|mut st| f(&mut st)))
     }));
-    match result {
-        Ok(r) => r,
-        Err(_) => {
-            let _ = catch_unwind(|| STATE.with(|s| s.try_borrow_mut().map(|mut st| st.take())));
-            eprintln!(
-                "[reaper-pad] internal error — gamepad disabled (try \"Reload configuration\")"
-            );
-            None
-        }
-    }
+    result.unwrap_or_else(|_| {
+        let _ = catch_unwind(|| STATE.with(|s| s.try_borrow_mut().map(|mut st| st.take())));
+        eprintln!("[reaper-pad] internal error — gamepad disabled (try \"Reload configuration\")");
+        None
+    })
 }
 
 fn reaper() -> Option<Reaper> {
