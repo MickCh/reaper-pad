@@ -317,7 +317,7 @@ mod tests {
             self.out
                 .iter()
                 .filter_map(|o| match o {
-                    Out::Cmd(c) => Some(c.clone()),
+                    Out::Cmd(c) => Some(*c),
                     _ => None,
                 })
                 .collect()
@@ -346,7 +346,7 @@ mod tests {
 
     impl Sink for TestSink {
         fn command(&mut self, cmd: &Command) {
-            self.out.push(Out::Cmd(cmd.clone()));
+            self.out.push(Out::Cmd(*cmd));
         }
         fn stick(&mut self, cmd: &StickCommand, delta: f32) {
             self.out.push(Out::Stick(*cmd, delta));

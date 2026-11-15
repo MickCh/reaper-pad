@@ -5,9 +5,6 @@ in the same commit that does it.
 
 ## Structure
 
-- **One table of commands.** Adding a button command means editing
-  `FromStr`, `Display`, `reaper_action_id` and `BUTTON_HELP` in
-  `src/command.rs`. Derive all four from a single table.
 - **`RawConfig` → `Config`.** `Config` is only consistent after `parse()`
   (`raw_buttons` vs. `#[serde(skip)] buttons`, a public field). Deserialize
   into a private `RawConfig` and build `Config` with
