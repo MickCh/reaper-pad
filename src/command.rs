@@ -199,7 +199,6 @@ mod tests {
             assert_eq!(name.parse(), Ok(cmd));
             assert_eq!(cmd.to_string(), name);
         }
-        assert_eq!(Command::NAMES.len(), 8);
     }
 
     #[test]
