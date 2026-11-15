@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-15
+
 ### Changed
 - Options from the 0.3 configuration format (`left_x`, `speed_left`,
   `[pad] axis_left_x` etc.) are reported with their new place instead of
