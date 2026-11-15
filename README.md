@@ -152,7 +152,7 @@ To find an action's ID: in the action list, right-click an action → **Copy sel
 | One press triggers twice | Increase `debounce_ms`. |
 | Scrolling goes the wrong way | Set `invert_y` in `[sticks.left]` or `[sticks.right]`. |
 | Error after editing the config | Run *Reload configuration*: the console window names the line and the problem. |
-| *“options renamed in reaper-pad 0.4”* after an update | The file is from 0.3. Move each listed option to its new place (e.g. `[sticks] left_x` → `x` in `[sticks.left]`), or delete the file to get the new default. |
+| *“options renamed in reaper-pad 0.4”* after an update | The file is from 0.3. Move each listed option to its new place (e.g. `[sticks] left_x` → `x` in `[sticks.left]`), or delete the file to get the new default. Other problems in the file follow after *“also:”*. |
 
 ## Development
 

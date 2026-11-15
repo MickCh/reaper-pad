@@ -12,7 +12,7 @@ Start REAPER from a terminal to see the `[reaper-pad]` lines.
       names the option; *Reload configuration* after fixing it starts the pad.
 - [ ] A file from 0.3 (e.g. `[sticks] left_x = "scroll_x"` plus a typo
       elsewhere): the console lists each renamed option with its new place,
-      and the typo after "also:".
+      and the typo after "also:" with its line in the file.
 - [ ] *Reload configuration* with a valid change: short buzz, the change
       applies (e.g. `[sticks.right] speed`).
 
