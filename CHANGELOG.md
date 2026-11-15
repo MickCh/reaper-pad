@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Release notes in ReaPack no longer show Markdown backticks.
+- A pad button bound to one of reaper-pad's own actions (e.g. *Reload
+  configuration*) now works; it used to do nothing.
+- `nan` and `inf` in `[sticks]` are rejected instead of being passed to
+  REAPER.
 
 ## [0.3.0] - 2026-11-14
 
