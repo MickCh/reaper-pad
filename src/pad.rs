@@ -3,7 +3,7 @@
 
 use crate::config::Config;
 use crate::logic::Pattern;
-use crate::router::{Device, InputEvent, Router, Sink};
+use crate::router::{Device, InputEvent, Log, Router, Sink};
 use sdl2::event::Event;
 use sdl2::joystick::{HatState, Joystick};
 use sdl2::{EventPump, JoystickSubsystem, Sdl};
@@ -57,18 +57,18 @@ impl Pad {
     }
 
     /// Open the first available pad (if any).
-    pub fn open_first(&mut self, sink: &mut dyn Sink) {
+    pub fn open_first(&mut self, log: &mut dyn Log) {
         let n = self.js.num_joysticks().unwrap_or(0);
         let joy = (0..n).find_map(|i| self.js.open(i).ok());
         match &joy {
-            Some(j) => sink.log(&format!(
+            Some(j) => log.log(&format!(
                 "Gamepad: {} ({} buttons, {} axes, {} hats)",
                 j.name(),
                 j.num_buttons(),
                 j.num_axes(),
                 j.num_hats()
             )),
-            None => sink.log("Waiting for a gamepad…"),
+            None => log.log("Waiting for a gamepad…"),
         }
         self.set_joy(joy);
     }

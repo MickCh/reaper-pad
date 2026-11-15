@@ -30,7 +30,7 @@ use reaper_medium::{
     CommandId, HookCommand, OwnedGaccelRegister, ProjectContext, Reaper, ReaperSession,
     ToggleAction, ToggleActionResult,
 };
-use router::Sink;
+use router::{Log, Sink};
 use std::cell::RefCell;
 use std::error::Error;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -100,7 +100,9 @@ impl Sink for ReaperSink {
                 .is_recording,
         )
     }
+}
 
+impl Log for ReaperSink {
     fn log(&mut self, msg: &str) {
         if self.console {
             self.reaper.show_console_msg(format!("{msg}\n"));
@@ -122,6 +124,9 @@ struct NullSink;
 impl Sink for NullSink {
     fn command(&mut self, _: &Command) {}
     fn stick(&mut self, _: &StickCommand, _: f32) {}
+}
+
+impl Log for NullSink {
     fn log(&mut self, msg: &str) {
         eprintln!("[reaper-pad] {msg}");
     }

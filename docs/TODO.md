@@ -5,9 +5,6 @@ in the same commit that does it.
 
 ## Structure
 
-- **Split `Sink` (ISP).** It combines running commands, querying the
-  recording state and logging. Fine at this size; split the logger off if
-  the trait grows.
 
 ## Rust
 

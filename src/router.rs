@@ -12,9 +12,19 @@ use crate::logic::{
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+/// Where status and diagnostic messages go.
+pub trait Log {
+    /// Status and diagnostic messages.
+    fn log(&mut self, msg: &str);
+    /// Something the user has to act on: always shown.
+    fn notice(&mut self, msg: &str) {
+        self.log(msg);
+    }
+}
+
 /// Receives what the pad does. Implemented by the REAPER side; keeps the
 /// input handling free of REAPER calls.
-pub trait Sink {
+pub trait Sink: Log {
     /// A button or D-pad command.
     fn command(&mut self, cmd: &Command);
     /// Stick movement: a fractional number of "steps" since the last call;
@@ -23,12 +33,6 @@ pub trait Sink {
     /// Whether REAPER is recording right now (`None` = unknown).
     fn recording(&mut self) -> Option<bool> {
         None
-    }
-    /// Status and diagnostic messages.
-    fn log(&mut self, msg: &str);
-    /// Something the user has to act on: always shown.
-    fn notice(&mut self, msg: &str) {
-        self.log(msg);
     }
 }
 
@@ -175,17 +179,17 @@ impl Router {
         self.sticks(dt, &read_axis, sink);
     }
 
-    fn on_record(&mut self, on: bool, now: Instant, sink: &mut dyn Sink) {
+    fn on_record(&mut self, on: bool, now: Instant, log: &mut dyn Log) {
         if self.recording == Some(on) {
             return;
         }
         // No rumble for the initial state.
         if self.recording.is_some() {
             if on {
-                sink.log("● recording");
+                log.log("● recording");
                 self.rumble(RUMBLE_START, now);
             } else {
-                sink.log("■ recording stopped");
+                log.log("■ recording stopped");
                 self.rumble(RUMBLE_STOP, now);
             }
         }
@@ -197,7 +201,7 @@ impl Router {
         &mut self,
         now: Instant,
         read_axis: &impl Fn(u32) -> Option<i16>,
-        sink: &mut dyn Sink,
+        log: &mut dyn Log,
     ) {
         if !self.cfg.pad.detect_digital_mode || !self.device.is_some_and(|d| d.dragonrise) {
             return;
@@ -206,13 +210,13 @@ impl Router {
         let y = read_axis(self.cfg.sticks.right.axis_y).unwrap_or(0);
         match self.mode.update(x, y, now) {
             Some(true) => {
-                sink.notice(
+                log.notice(
                     "Gamepad is in DIGITAL mode (LED green): the right stick would press \
                      buttons 1–4, so they are ignored. Press the Analog button (LED red).",
                 );
                 self.rumble(RUMBLE_DIGITAL, now);
             }
-            Some(false) => sink.notice("Gamepad is in analog mode — buttons 1–4 work again."),
+            Some(false) => log.notice("Gamepad is in analog mode — buttons 1–4 work again."),
             None => {}
         }
     }
@@ -354,6 +358,9 @@ mod tests {
         fn recording(&mut self) -> Option<bool> {
             self.recording
         }
+    }
+
+    impl Log for TestSink {
         fn log(&mut self, msg: &str) {
             self.out.push(Out::Log(msg.into()));
         }
