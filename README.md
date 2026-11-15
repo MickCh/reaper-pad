@@ -159,6 +159,7 @@ To find an action's ID: in the action list, right-click an action → **Copy sel
 src/lib.rs      REAPER side: entry point, actions, executing commands (reaper-rs)
 src/pad.rs      gamepad through SDL2: devices, events, rumble
 src/router.rs   what the input means: commands, test mode, digital mode, sticks
+src/guard.rs    plugin state guarded against re-entrancy and panics
 src/logic.rs    debounce, D-pad repeat, stick curves, rumble scheduling
 src/command.rs  bindable commands
 src/config.rs   configuration and validation
@@ -172,7 +173,8 @@ cargo fmt --all
 ```
 
 Hardware measurements (analog vs digital mode, axis values) and diagnostic
-scripts: [docs/hardware.md](docs/hardware.md).
+scripts: [docs/hardware.md](docs/hardware.md). What needs REAPER or a real
+pad is checked by hand: [docs/manual-tests.md](docs/manual-tests.md).
 
 The input logic (debounce, D-pad repeat, stick curves, rumble scheduling, config validation) is hardware-independent and unit-tested. The event routing (`router.rs`) is tested the same way. SDL2 lives only in `pad.rs`, and REAPER calls only in `lib.rs` (behind the `Sink` trait).
 

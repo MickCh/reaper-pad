@@ -16,12 +16,14 @@
 
 mod command;
 mod config;
+mod guard;
 mod logic;
 mod pad;
 mod router;
 
 use command::{Command, StickCommand};
 use config::{Config, DEFAULT_CONFIG, LoadError};
+use guard::{Guarded, Unavailable};
 use logic::{RUMBLE_HELLO, Stepper};
 use pad::Pad;
 use reaper_low::PluginContext;
@@ -34,7 +36,6 @@ use router::{Log, Sink};
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -154,31 +155,25 @@ impl State {
 
 thread_local! {
     // The timer and actions are always called on REAPER's main thread.
-    static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    /// The plugin state, and this plugin's actions triggered while it was in
+    /// use (a pad button bound to one of them), run by the timer afterwards.
+    static STATE: Guarded<State, Action> = const { Guarded::new() };
     static REAPER: RefCell<Option<Reaper>> = const { RefCell::new(None) };
-    /// This plugin's actions triggered while the state was in use (a pad
-    /// button bound to one of them); run by the timer once it is free.
-    static DEFERRED: RefCell<Vec<Action>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Whether the state is borrowed right now, i.e. we are being called back
-/// from inside [`with_state`].
-fn state_busy() -> bool {
-    STATE.with(|s| s.try_borrow_mut().is_err())
-}
-
-/// Run `f` on the plugin state. Safe against panics (a bug here must not take
-/// REAPER down — the pad is disabled instead) and re-entrancy (e.g. a pad
-/// button bound to one of this plugin's own actions).
+/// Run `f` on the plugin state (see [`Guarded::with`]). A panic disables the
+/// pad instead of taking REAPER down.
 fn with_state<R>(f: impl FnOnce(&mut Option<State>) -> R) -> Option<R> {
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        STATE.with(|s| s.try_borrow_mut().ok().map(|mut st| f(&mut st)))
-    }));
-    result.unwrap_or_else(|_| {
-        let _ = catch_unwind(|| STATE.with(|s| s.try_borrow_mut().map(|mut st| st.take())));
-        eprintln!("[reaper-pad] internal error — gamepad disabled (try \"Reload configuration\")");
-        None
-    })
+    match STATE.with(|g| g.with(f)) {
+        Ok(r) => Some(r),
+        Err(Unavailable::Busy) => None,
+        Err(Unavailable::Panicked) => {
+            eprintln!(
+                "[reaper-pad] internal error — gamepad disabled (try \"Reload configuration\")"
+            );
+            None
+        }
+    }
 }
 
 fn reaper() -> Option<Reaper> {
@@ -262,8 +257,7 @@ extern "C" fn timer() {
             st.pad.poll(&mut NullSink);
         }
     });
-    let deferred = DEFERRED.with(|d| std::mem::take(&mut *d.borrow_mut()));
-    for action in deferred {
+    for action in STATE.with(Guarded::take_deferred) {
         action.run();
     }
 }
@@ -403,13 +397,9 @@ impl HookCommand for Actions {
         let Some(action) = Action::from_id(command_id) else {
             return false;
         };
-        if state_busy() {
-            // Called from inside the timer (a pad button bound to this
-            // action): the state is in use, so run it right after.
-            DEFERRED.with(|d| d.borrow_mut().push(action));
-        } else {
-            action.run();
-        }
+        // Called from inside the timer (a pad button bound to this action),
+        // the state is in use: the timer runs it right after.
+        STATE.with(|g| g.run_or_defer(action, Action::run));
         true
     }
 }
@@ -467,7 +457,9 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
     register_actions(&mut session)?;
 
     match init_state(&reaper) {
-        Ok(st) => STATE.with(|s| *s.borrow_mut() = Some(st)),
+        Ok(st) => {
+            with_state(|s| *s = Some(st));
+        }
         Err(e) => reaper.show_console_msg(format!(
             "reaper-pad: {e}\nGamepad disabled. Fix the file and run \"reaper-pad: Reload configuration\".\n"
         )),
