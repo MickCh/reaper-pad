@@ -1,150 +1,183 @@
 //! Commands that can be bound to buttons, the D-pad and sticks.
+//!
+//! Each command enum is generated together with its names (and REAPER
+//! command IDs) by a macro, so every variant has them: a missing one is a
+//! compile error, not a panic at run time.
 
 use serde::Deserialize;
 use std::fmt;
 use std::str::FromStr;
 
-/// A command triggered by a button or the D-pad.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(try_from = "String")]
-pub enum Command {
-    PlayStop,
-    Play,
-    Stop,
-    Record,
-    Metronome,
-    Repeat,
-    Undo,
-    Redo,
-    /// Any REAPER action by its numeric command ID.
-    Action(u32),
+/// Why a command in the configuration was not accepted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandError {
+    /// Not a button / D-pad command.
+    Unknown(String),
+    /// Not a stick command.
+    UnknownStick(String),
+    /// `action:` followed by something other than a positive number.
+    InvalidActionId(String),
 }
 
-/// The named commands: name in the config file, command, REAPER command ID.
-/// Everything about a named command is defined here, and only here.
-const NAMED: &[(&str, Command, u32)] = &[
-    ("play_stop", Command::PlayStop, 40044), // Transport: Play/stop
-    ("play", Command::Play, 1007),           // Transport: Play
-    ("stop", Command::Stop, 1016),           // Transport: Stop
-    ("record", Command::Record, 1013),       // Transport: Record
-    ("metronome", Command::Metronome, 40364), // Options: Toggle metronome
-    ("repeat", Command::Repeat, 1068),       // Transport: Toggle repeat
-    ("undo", Command::Undo, 40029),          // Edit: Undo
-    ("redo", Command::Redo, 40030),          // Edit: Redo
-];
-
-/// The stick commands and their names in the config file.
-const STICK: &[(&str, StickCommand)] = &[
-    ("scroll_x", StickCommand::ScrollX),
-    ("scroll_y", StickCommand::ScrollY),
-    ("zoom_x", StickCommand::ZoomX),
-    ("zoom_y", StickCommand::ZoomY),
-];
-
-/// "a, b, c" from the names in a table.
-fn names<T>(table: &[(&str, T)]) -> String {
-    table.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ")
-}
-
-impl Command {
-    /// Name and REAPER command ID of a named command; `None` for `Action`.
-    fn named(self) -> Option<(&'static str, u32)> {
-        NAMED
-            .iter()
-            .find(|(_, c, _)| *c == self)
-            .map(|(n, _, id)| (*n, *id))
-    }
-
-    /// The REAPER command ID to run.
-    pub fn reaper_action_id(self) -> u32 {
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Command::Action(id) => id,
-            named => named.named().expect("named command missing from NAMED").1,
+            CommandError::Unknown(s) => write!(
+                f,
+                "unknown command \"{s}\" (expected one of: {}, action:<id>)",
+                Command::NAMES.join(", ")
+            ),
+            CommandError::UnknownStick(s) => write!(
+                f,
+                "unknown stick command \"{s}\" (expected one of: {})",
+                StickCommand::NAMES.join(", ")
+            ),
+            CommandError::InvalidActionId(s) => write!(
+                f,
+                "invalid action ID in \"{s}\" (expected a positive number, e.g. action:40044)"
+            ),
         }
     }
+}
+
+impl std::error::Error for CommandError {}
+
+/// `Command`: the named commands (variant, name in the config file, REAPER
+/// command ID), plus `Action(id)` for any other REAPER action.
+macro_rules! commands {
+    ($($variant:ident = $name:literal, $id:literal;)*) => {
+        /// A command triggered by a button or the D-pad.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+        #[serde(try_from = "String")]
+        pub enum Command {
+            $($variant,)*
+            /// Any REAPER action by its numeric command ID.
+            Action(u32),
+        }
+
+        impl Command {
+            /// The named commands, in the order of the help text.
+            #[cfg(test)]
+            const ALL_NAMED: &[Command] = &[$(Command::$variant),*];
+            const NAMES: &[&str] = &[$($name),*];
+
+            /// The REAPER command ID to run.
+            pub fn reaper_action_id(self) -> u32 {
+                match self {
+                    $(Command::$variant => $id,)*
+                    Command::Action(id) => id,
+                }
+            }
+
+            fn from_name(s: &str) -> Option<Self> {
+                match s {
+                    $($name => Some(Command::$variant),)*
+                    _ => None,
+                }
+            }
+        }
+
+        impl fmt::Display for Command {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(Command::$variant => f.write_str($name),)*
+                    Command::Action(id) => write!(f, "action:{id}"),
+                }
+            }
+        }
+    };
+}
+
+commands! {
+    PlayStop = "play_stop", 40044; // Transport: Play/stop
+    Play = "play", 1007;           // Transport: Play
+    Stop = "stop", 1016;           // Transport: Stop
+    Record = "record", 1013;       // Transport: Record
+    Metronome = "metronome", 40364; // Options: Toggle metronome
+    Repeat = "repeat", 1068;       // Transport: Toggle repeat
+    Undo = "undo", 40029;          // Edit: Undo
+    Redo = "redo", 40030;          // Edit: Redo
 }
 
 impl FromStr for Command {
-    type Err = String;
+    type Err = CommandError;
 
-    fn from_str(s: &str) -> Result<Self, String> {
+    fn from_str(s: &str) -> Result<Self, CommandError> {
         let s = s.trim();
-        if let Some((_, cmd, _)) = NAMED.iter().find(|(n, _, _)| *n == s) {
-            return Ok(*cmd);
+        if let Some(cmd) = Command::from_name(s) {
+            return Ok(cmd);
         }
-        if let Some(("action", id)) = s.split_once(':') {
-            Ok(Command::Action(parse_action_id(s, id)?))
-        } else {
-            let help: Vec<_> = NAMED.iter().map(|(n, _, _)| *n).collect();
-            Err(format!(
-                "unknown command \"{s}\" (expected one of: {}, action:<id>)",
-                help.join(", ")
-            ))
+        match s.split_once(':') {
+            Some(("action", id)) => match id.trim().parse::<u32>() {
+                Ok(n) if n > 0 => Ok(Command::Action(n)),
+                _ => Err(CommandError::InvalidActionId(s.into())),
+            },
+            _ => Err(CommandError::Unknown(s.into())),
         }
     }
 }
 
 impl TryFrom<String> for Command {
-    type Error = String;
-    fn try_from(s: String) -> Result<Self, String> {
+    type Error = CommandError;
+    fn try_from(s: String) -> Result<Self, CommandError> {
         s.parse()
     }
 }
 
-impl fmt::Display for Command {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Command::Action(id) => write!(f, "action:{id}"),
-            named => f.write_str(named.named().expect("named command missing from NAMED").0),
+/// `StickCommand`: (doc, variant, name in the config file).
+macro_rules! stick_commands {
+    ($($(#[$doc:meta])* $variant:ident = $name:literal;)*) => {
+        /// A continuous command driven by a stick axis.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+        #[serde(try_from = "String")]
+        pub enum StickCommand {
+            $($(#[$doc])* $variant,)*
         }
-    }
+
+        impl StickCommand {
+            #[cfg(test)]
+            const ALL: &[StickCommand] = &[$(StickCommand::$variant),*];
+            const NAMES: &[&str] = &[$($name),*];
+
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(StickCommand::$variant => $name,)*
+                }
+            }
+
+            fn from_name(s: &str) -> Option<Self> {
+                match s {
+                    $($name => Some(StickCommand::$variant),)*
+                    _ => None,
+                }
+            }
+        }
+    };
 }
 
-/// A continuous command driven by a stick axis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
-#[serde(try_from = "String")]
-pub enum StickCommand {
+stick_commands! {
     /// Scroll the arrange view horizontally (time).
-    ScrollX,
+    ScrollX = "scroll_x";
     /// Scroll the arrange view vertically (tracks).
-    ScrollY,
+    ScrollY = "scroll_y";
     /// Zoom horizontally (time).
-    ZoomX,
+    ZoomX = "zoom_x";
     /// Zoom vertically (track height).
-    ZoomY,
-}
-
-impl StickCommand {
-    pub fn name(self) -> &'static str {
-        STICK
-            .iter()
-            .find(|(_, c)| *c == self)
-            .map(|(n, _)| *n)
-            .expect("stick command missing from STICK")
-    }
+    ZoomY = "zoom_y";
 }
 
 impl FromStr for StickCommand {
-    type Err = String;
+    type Err = CommandError;
 
-    fn from_str(s: &str) -> Result<Self, String> {
+    fn from_str(s: &str) -> Result<Self, CommandError> {
         let s = s.trim();
-        STICK
-            .iter()
-            .find(|(n, _)| *n == s)
-            .map(|(_, c)| *c)
-            .ok_or_else(|| {
-                format!(
-                    "unknown stick command \"{s}\" (expected one of: {})",
-                    names(STICK)
-                )
-            })
+        StickCommand::from_name(s).ok_or_else(|| CommandError::UnknownStick(s.into()))
     }
 }
 
 impl TryFrom<String> for StickCommand {
-    type Error = String;
-    fn try_from(s: String) -> Result<Self, String> {
+    type Error = CommandError;
+    fn try_from(s: String) -> Result<Self, CommandError> {
         s.parse()
     }
 }
@@ -155,86 +188,27 @@ impl fmt::Display for StickCommand {
     }
 }
 
-fn parse_action_id(full: &str, id: &str) -> Result<u32, String> {
-    match id.trim().parse::<u32>() {
-        Ok(0) | Err(_) => Err(format!(
-            "invalid action ID in \"{full}\" (expected a positive number, e.g. action:40044)"
-        )),
-        Ok(n) => Ok(n),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn named_commands_round_trip() {
-        for name in [
-            "play_stop",
-            "play",
-            "stop",
-            "record",
-            "metronome",
-            "repeat",
-            "undo",
-            "redo",
-        ] {
-            let cmd: Command = name.parse().unwrap();
+        assert_eq!(Command::ALL_NAMED.len(), Command::NAMES.len());
+        for (&cmd, &name) in Command::ALL_NAMED.iter().zip(Command::NAMES) {
+            assert_eq!(name.parse(), Ok(cmd));
             assert_eq!(cmd.to_string(), name);
         }
-    }
-
-    /// Every variant has to be in the tables, or `named()`/`name()` panic.
-    /// Adding a variant without a table row breaks the `match`es below.
-    #[test]
-    fn tables_cover_every_variant() {
-        for cmd in [
-            Command::PlayStop,
-            Command::Play,
-            Command::Stop,
-            Command::Record,
-            Command::Metronome,
-            Command::Repeat,
-            Command::Undo,
-            Command::Redo,
-        ] {
-            match cmd {
-                Command::PlayStop
-                | Command::Play
-                | Command::Stop
-                | Command::Record
-                | Command::Metronome
-                | Command::Repeat
-                | Command::Undo
-                | Command::Redo
-                | Command::Action(_) => {}
-            }
-            assert!(cmd.named().is_some(), "{cmd:?} missing from NAMED");
-        }
-        assert_eq!(NAMED.len(), 8, "a NAMED row without a test above");
-        for cmd in [
-            StickCommand::ScrollX,
-            StickCommand::ScrollY,
-            StickCommand::ZoomX,
-            StickCommand::ZoomY,
-        ] {
-            match cmd {
-                StickCommand::ScrollX
-                | StickCommand::ScrollY
-                | StickCommand::ZoomX
-                | StickCommand::ZoomY => {}
-            }
-            assert_eq!(cmd.name().parse::<StickCommand>(), Ok(cmd));
-        }
-        assert_eq!(STICK.len(), 4);
+        assert_eq!(Command::NAMES.len(), 8);
     }
 
     #[test]
-    fn table_names_and_ids_are_unique() {
-        for (i, (name, cmd, id)) in NAMED.iter().enumerate() {
-            for (n, c, d) in &NAMED[i + 1..] {
-                assert!(name != n && cmd != c && id != d, "duplicate row: {name}");
+    fn names_and_ids_are_unique() {
+        // Duplicate names would be unreachable `match` arms (a warning, an
+        // error in CI); duplicate IDs are only caught here.
+        for (i, a) in Command::ALL_NAMED.iter().enumerate() {
+            for b in &Command::ALL_NAMED[i + 1..] {
+                assert_ne!(a.reaper_action_id(), b.reaper_action_id(), "{a} / {b}");
             }
         }
     }
@@ -257,30 +231,42 @@ mod tests {
     #[test]
     fn invalid_commands_are_rejected_with_help() {
         let err = "plya".parse::<Command>().unwrap_err();
+        assert_eq!(err, CommandError::Unknown("plya".into()));
+        let msg = err.to_string();
         assert!(
-            err.contains("unknown command \"plya\"") && err.contains("play_stop"),
-            "{err}"
+            msg.contains("unknown command \"plya\"") && msg.contains("play_stop, play,"),
+            "{msg}"
+        );
+        assert_eq!(
+            "action:abc".parse::<Command>(),
+            Err(CommandError::InvalidActionId("action:abc".into()))
         );
         assert!(
-            "action:abc"
+            "action:0"
                 .parse::<Command>()
                 .unwrap_err()
+                .to_string()
                 .contains("invalid action ID")
         );
-        assert!("action:0".parse::<Command>().is_err());
-        assert!("osc:/record".parse::<Command>().is_err());
+        assert!(matches!(
+            "osc:/record".parse::<Command>(),
+            Err(CommandError::Unknown(_))
+        ));
     }
 
     #[test]
     fn stick_commands() {
-        for name in ["scroll_x", "scroll_y", "zoom_x", "zoom_y"] {
-            assert_eq!(name.parse::<StickCommand>().unwrap().to_string(), name);
+        assert_eq!(StickCommand::ALL.len(), StickCommand::NAMES.len());
+        for (&cmd, &name) in StickCommand::ALL.iter().zip(StickCommand::NAMES) {
+            assert_eq!(name.parse(), Ok(cmd));
+            assert_eq!(cmd.to_string(), name);
         }
+        let err = "play".parse::<StickCommand>().unwrap_err();
+        assert_eq!(err, CommandError::UnknownStick("play".into()));
         assert!(
-            "play"
-                .parse::<StickCommand>()
-                .unwrap_err()
-                .contains("unknown stick command")
+            err.to_string()
+                .contains("expected one of: scroll_x, scroll_y"),
+            "{err}"
         );
     }
 }
