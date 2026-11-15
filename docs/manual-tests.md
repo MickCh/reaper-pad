@@ -16,7 +16,8 @@ Start REAPER from a terminal to see the `[reaper-pad]` lines.
 ## Actions
 
 - [ ] *Enable/disable gamepad*: buttons stop and start working; the toggle
-      state shows in the action list / toolbar.
+      state shows in the action list / toolbar, and the toolbar button does
+      not flicker while pad buttons are pressed.
 - [ ] *Button test (console)*: buttons, axes and D-pad positions are printed
       ("D-pad left-down"), REAPER is not controlled; running it again ends it.
 - [ ] (Optional) A pad button bound to one of these actions works like

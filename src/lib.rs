@@ -33,7 +33,7 @@ use reaper_medium::{
     ToggleAction, ToggleActionResult,
 };
 use router::{Log, Sink};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
@@ -153,27 +153,51 @@ impl State {
     }
 }
 
+/// The state of the toggle actions, as shown in REAPER's toolbars and action
+/// list.
+#[derive(Debug, Clone, Copy, Default)]
+struct Toggles {
+    enabled: bool,
+    test: bool,
+}
+
+impl Toggles {
+    fn of(state: Option<&State>) -> Self {
+        state.map_or_else(Toggles::default, |st| Toggles {
+            enabled: st.enabled,
+            test: st.pad.test_mode(),
+        })
+    }
+}
+
 thread_local! {
     // The timer and actions are always called on REAPER's main thread.
     /// The plugin state, and this plugin's actions triggered while it was in
     /// use (a pad button bound to one of them), run by the timer afterwards.
     static STATE: Guarded<State, Action> = const { Guarded::new() };
+    /// A copy of the toggles, updated after every access to [`STATE`].
+    /// REAPER asks for them from inside `poll` too (refreshing a toolbar
+    /// after a command), when the state itself is in use.
+    static TOGGLES: Cell<Toggles> = const { Cell::new(Toggles { enabled: false, test: false }) };
     static REAPER: RefCell<Option<Reaper>> = const { RefCell::new(None) };
 }
 
 /// Run `f` on the plugin state (see [`Guarded::with`]). A panic disables the
-/// pad instead of taking REAPER down.
-fn with_state<R>(f: impl FnOnce(&mut Option<State>) -> R) -> Option<R> {
-    match STATE.with(|g| g.with(f)) {
-        Ok(r) => Some(r),
-        Err(Unavailable::Busy) => None,
-        Err(Unavailable::Panicked) => {
-            eprintln!(
-                "[reaper-pad] internal error — gamepad disabled (try \"Reload configuration\")"
-            );
-            None
-        }
+/// pad instead of taking REAPER down; it is reported here, so callers only
+/// need to handle [`Unavailable`] when they do something else in that case.
+fn with_state<R>(f: impl FnOnce(&mut Option<State>) -> R) -> Result<R, Unavailable> {
+    let result = STATE.with(|g| {
+        g.with(|s| {
+            let r = f(s);
+            TOGGLES.set(Toggles::of(s.as_ref()));
+            r
+        })
+    });
+    if let Err(Unavailable::Panicked) = result {
+        TOGGLES.set(Toggles::default());
+        eprintln!("[reaper-pad] internal error — gamepad disabled (try \"Reload configuration\")");
     }
+    result
 }
 
 fn reaper() -> Option<Reaper> {
@@ -243,7 +267,7 @@ fn init_state(reaper: &Reaper) -> Result<State, InitError> {
 }
 
 extern "C" fn timer() {
-    with_state(|s| {
+    let _ = with_state(|s| {
         let Some(st) = s.as_mut() else { return };
         if st.ticks < HELLO_AFTER_TICKS {
             st.ticks += 1;
@@ -265,7 +289,7 @@ extern "C" fn timer() {
 /// REAPER is about to close: stop the motors and shut down the pad and SDL
 /// while REAPER is still intact. Later timer calls find no state.
 extern "C" fn at_exit() {
-    with_state(|s| drop(s.take()));
+    let _ = with_state(|s| drop(s.take()));
 }
 
 // ---------------------------------------------------------------------------
@@ -332,20 +356,26 @@ fn reload() {
         None => false,
     });
     match reloaded {
-        Some(true) => {}
-        // with_state has already reported the internal error.
-        None => return,
+        Ok(true) => {}
         // Startup failed earlier (e.g. an error in the file) — start from scratch.
-        Some(false) => match init_state(&reaper) {
+        Ok(false) => match init_state(&reaper) {
             Ok(mut st) => {
                 st.ticks = HELLO_AFTER_TICKS - 1; // rumble on the next tick
-                with_state(|s| *s = Some(st));
+                let _ = with_state(|s| *s = Some(st));
             }
             Err(e) => {
                 reaper.show_console_msg(format!("reaper-pad: {e}\n"));
                 return;
             }
         },
+        // Already reported by with_state.
+        Err(Unavailable::Panicked) => return,
+        // Not expected: actions are deferred while the state is in use
+        // (see `Actions::call`), so reload never runs inside it.
+        Err(Unavailable::Busy) => {
+            eprintln!("[reaper-pad] busy, configuration not reloaded");
+            return;
+        }
     }
     eprintln!(
         "[reaper-pad] configuration loaded: {}",
@@ -354,7 +384,7 @@ fn reload() {
 }
 
 fn toggle_enabled() {
-    with_state(|s| {
+    let _ = with_state(|s| {
         if let Some(st) = s.as_mut() {
             st.enabled = !st.enabled;
             eprintln!(
@@ -384,6 +414,7 @@ fn toggle_test() {
             "reaper-pad — test finished, the gamepad controls REAPER again.\n".into()
         })
     })
+    .ok()
     .flatten();
     if let (Some(m), Some(r)) = (msg, reaper()) {
         r.show_console_msg(m);
@@ -409,14 +440,17 @@ impl ToggleAction for Actions {
         let Some(ids) = IDS.get() else {
             return ToggleActionResult::NotRelevant;
         };
+        // Read from the copy, not the state: this may be called from inside
+        // `poll`, while the state is in use.
+        let toggles = TOGGLES.get();
         let on = if command_id == ids.toggle {
-            with_state(|s| s.as_ref().map(|st| st.enabled)).flatten()
+            toggles.enabled
         } else if command_id == ids.test {
-            with_state(|s| s.as_ref().map(|st| st.pad.test_mode())).flatten()
+            toggles.test
         } else {
             return ToggleActionResult::NotRelevant;
         };
-        if on == Some(true) {
+        if on {
             ToggleActionResult::On
         } else {
             ToggleActionResult::Off
@@ -458,7 +492,7 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
 
     match init_state(&reaper) {
         Ok(st) => {
-            with_state(|s| *s = Some(st));
+            let _ = with_state(|s| *s = Some(st));
         }
         Err(e) => reaper.show_console_msg(format!(
             "reaper-pad: {e}\nGamepad disabled. Fix the file and run \"reaper-pad: Reload configuration\".\n"
