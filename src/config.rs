@@ -284,7 +284,10 @@ impl Axis {
 impl Config {
     /// Parse and validate a configuration.
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        let raw: RawConfig = toml::from_str(text).map_err(ConfigError::Syntax)?;
+        let raw: RawConfig = toml::from_str(text).map_err(|e| match renamed_options(text) {
+            Some(hint) => ConfigError::Invalid(hint),
+            None => ConfigError::Syntax(e),
+        })?;
         raw.try_into()
     }
 
@@ -370,6 +373,46 @@ fn validate(s: &Sticks) -> Result<(), String> {
     Ok(())
 }
 
+/// Options renamed in 0.4: (old section, old name, new section, new name).
+const RENAMED: [(&str, &str, &str, &str); 12] = [
+    ("sticks", "left_x", "sticks.left", "x"),
+    ("sticks", "left_y", "sticks.left", "y"),
+    ("sticks", "right_x", "sticks.right", "x"),
+    ("sticks", "right_y", "sticks.right", "y"),
+    ("sticks", "speed_left", "sticks.left", "speed"),
+    ("sticks", "speed_right", "sticks.right", "speed"),
+    ("sticks", "invert_left_y", "sticks.left", "invert_y"),
+    ("sticks", "invert_right_y", "sticks.right", "invert_y"),
+    ("pad", "axis_left_x", "sticks.left", "axis_x"),
+    ("pad", "axis_left_y", "sticks.left", "axis_y"),
+    ("pad", "axis_right_x", "sticks.right", "axis_x"),
+    ("pad", "axis_right_y", "sticks.right", "axis_y"),
+];
+
+/// If the file uses option names from before 0.4, say where they moved.
+/// Only called for a file that did not parse, so it may be slow.
+fn renamed_options(text: &str) -> Option<String> {
+    let table: toml::Table = toml::from_str(text).ok()?;
+    let moved: Vec<String> = RENAMED
+        .iter()
+        .filter(|(section, old, ..)| {
+            table
+                .get(*section)
+                .and_then(toml::Value::as_table)
+                .is_some_and(|t| t.contains_key(*old))
+        })
+        .map(|(section, old, new_section, new)| {
+            format!("  [{section}] {old} → [{new_section}] {new}")
+        })
+        .collect();
+    (!moved.is_empty()).then(|| {
+        format!(
+            "options renamed in reaper-pad 0.4 (see the default config.toml):\n{}",
+            moved.join("\n")
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -414,9 +457,31 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("invert_x"), "{err}");
-        // The 0.3 names are gone.
-        assert!(Config::parse("[sticks]\nleft_x = \"scroll_x\"\n").is_err());
-        assert!(Config::parse("[pad]\naxis_left_x = 0\n").is_err());
+    }
+
+    #[test]
+    fn options_from_0_3_point_to_their_new_place() {
+        let err = Config::parse(
+            "[sticks]\nleft_x = \"scroll_x\"\ndeadzone = 0.2\n\
+             [pad]\naxis_right_y = 4\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("[sticks] left_x → [sticks.left] x"), "{err}");
+        assert!(
+            err.contains("[pad] axis_right_y → [sticks.right] axis_y"),
+            "{err}"
+        );
+        assert!(!err.contains("deadzone"), "{err}");
+        // Renamed options are reported first; other errors as before.
+        let err = Config::parse("[pad]\naxis_left_x = 0\nrumbl = true\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("axis_left_x → [sticks.left] axis_x"), "{err}");
+        let err = Config::parse("[pad]\nrumbl = true\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("rumbl"), "{err}");
     }
 
     #[test]

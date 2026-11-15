@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Options from the 0.3 configuration format (`left_x`, `speed_left`,
+  `[pad] axis_left_x` etc.) are reported with their new place instead of
+  as unknown options.
+
+### Fixed
+- The toolbar buttons of *Enable/disable gamepad* and *Button test* no
+  longer flicker off when REAPER refreshes them while the gamepad is in use.
+
 ## [0.4.0] - 2026-11-15
 
 ### Added
