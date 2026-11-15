@@ -13,20 +13,53 @@ pub const DEFAULT_CONFIG: &str = include_str!("../config.toml");
 /// Highest button number accepted in `[buttons]`.
 pub const MAX_BUTTON: u32 = 32;
 
+/// A parsed and validated configuration. Only built through
+/// [`Config::parse`] / [`Config::load`], so it is always valid.
+#[derive(Debug)]
+pub struct Config {
+    /// Button number (as printed on the pad, starting at 1) → command.
+    buttons: BTreeMap<u32, Command>,
+    pub dpad: Dpad,
+    pub sticks: Sticks,
+    pub pad: PadCfg,
+}
+
+/// The file as written: button numbers are still strings (TOML keys).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    #[serde(rename = "buttons", default)]
-    raw_buttons: HashMap<String, Command>,
-    /// Button number (as printed on the pad, starting at 1) → command.
-    #[serde(skip)]
-    pub buttons: BTreeMap<u32, Command>,
+struct RawConfig {
     #[serde(default)]
-    pub dpad: Dpad,
+    buttons: HashMap<String, Command>,
     #[serde(default)]
-    pub sticks: Sticks,
+    dpad: Dpad,
     #[serde(default)]
-    pub pad: PadCfg,
+    sticks: Sticks,
+    #[serde(default)]
+    pad: PadCfg,
+}
+
+impl TryFrom<RawConfig> for Config {
+    type Error = String;
+
+    fn try_from(raw: RawConfig) -> Result<Self, String> {
+        let buttons = raw
+            .buttons
+            .into_iter()
+            .map(|(k, v)| match k.trim().parse::<u32>() {
+                Ok(n) if (1..=MAX_BUTTON).contains(&n) => Ok((n, v)),
+                _ => Err(format!(
+                    "[buttons]: invalid button number \"{k}\" (expected 1–{MAX_BUTTON})"
+                )),
+            })
+            .collect::<Result<_, _>>()?;
+        validate(&raw.sticks)?;
+        Ok(Config {
+            buttons,
+            dpad: raw.dpad,
+            sticks: raw.sticks,
+            pad: raw.pad,
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,58 +168,14 @@ impl Axis {
 impl Config {
     /// Parse and validate a configuration.
     pub fn parse(text: &str) -> Result<Self, String> {
-        let mut cfg: Config = toml::from_str(text).map_err(|e| e.to_string())?;
-        cfg.buttons = std::mem::take(&mut cfg.raw_buttons)
-            .into_iter()
-            .map(|(k, v)| match k.trim().parse::<u32>() {
-                Ok(n) if (1..=MAX_BUTTON).contains(&n) => Ok((n, v)),
-                _ => Err(format!(
-                    "[buttons]: invalid button number \"{k}\" (expected 1–{MAX_BUTTON})"
-                )),
-            })
-            .collect::<Result<_, _>>()?;
-        cfg.validate()?;
-        Ok(cfg)
+        let raw: RawConfig = toml::from_str(text).map_err(|e| e.to_string())?;
+        raw.try_into()
     }
 
     pub fn load(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
         Self::parse(&text).map_err(|e| format!("error in {}: {e}", path.display()))
-    }
-
-    fn validate(&self) -> Result<(), String> {
-        let s = &self.sticks;
-        // TOML accepts `nan` and `inf`; comparisons with NaN are always false,
-        // so the range checks below would let them through.
-        for (name, v) in [
-            ("deadzone", f64::from(s.deadzone)),
-            ("min_steps_per_sec", f64::from(s.min_steps_per_sec)),
-            ("max_steps_per_sec", f64::from(s.max_steps_per_sec)),
-            ("speed_left", f64::from(s.speed_left)),
-            ("speed_right", f64::from(s.speed_right)),
-            ("zoom_amount", s.zoom_amount),
-        ] {
-            if !v.is_finite() {
-                return Err(format!("[sticks] {name} must be a finite number (got {v})"));
-            }
-        }
-        if !(0.0..1.0).contains(&s.deadzone) {
-            return Err(format!(
-                "[sticks] deadzone must be between 0.0 and 1.0 (got {})",
-                s.deadzone
-            ));
-        }
-        if s.min_steps_per_sec < 0.0 || s.max_steps_per_sec < s.min_steps_per_sec {
-            return Err("[sticks] expected 0 <= min_steps_per_sec <= max_steps_per_sec".into());
-        }
-        if s.zoom_amount < 0.0 {
-            return Err("[sticks] zoom_amount must not be negative".into());
-        }
-        if s.speed_left < 0.0 || s.speed_right < 0.0 {
-            return Err("[sticks] speed_left/speed_right must not be negative".into());
-        }
-        Ok(())
     }
 
     /// Command for a button number as printed on the pad (1-based).
@@ -234,6 +223,39 @@ impl Config {
     }
 }
 
+fn validate(s: &Sticks) -> Result<(), String> {
+    // TOML accepts `nan` and `inf`; comparisons with NaN are always false,
+    // so the range checks below would let them through.
+    for (name, v) in [
+        ("deadzone", f64::from(s.deadzone)),
+        ("min_steps_per_sec", f64::from(s.min_steps_per_sec)),
+        ("max_steps_per_sec", f64::from(s.max_steps_per_sec)),
+        ("speed_left", f64::from(s.speed_left)),
+        ("speed_right", f64::from(s.speed_right)),
+        ("zoom_amount", s.zoom_amount),
+    ] {
+        if !v.is_finite() {
+            return Err(format!("[sticks] {name} must be a finite number (got {v})"));
+        }
+    }
+    if !(0.0..1.0).contains(&s.deadzone) {
+        return Err(format!(
+            "[sticks] deadzone must be between 0.0 and 1.0 (got {})",
+            s.deadzone
+        ));
+    }
+    if s.min_steps_per_sec < 0.0 || s.max_steps_per_sec < s.min_steps_per_sec {
+        return Err("[sticks] expected 0 <= min_steps_per_sec <= max_steps_per_sec".into());
+    }
+    if s.zoom_amount < 0.0 {
+        return Err("[sticks] zoom_amount must not be negative".into());
+    }
+    if s.speed_left < 0.0 || s.speed_right < 0.0 {
+        return Err("[sticks] speed_left/speed_right must not be negative".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,6 +266,7 @@ mod tests {
         assert_eq!(c.button(1), Some(&Command::PlayStop));
         assert_eq!(c.button(2), Some(&Command::Record));
         assert_eq!(c.buttons.len(), 12);
+        assert_eq!(c.button(13), None);
         assert_eq!(c.stick_command(Axis::RightX), Some(&StickCommand::ZoomX));
         assert!(c.dpad.up.is_some() && c.dpad.right.is_some());
     }

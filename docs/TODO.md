@@ -5,10 +5,6 @@ in the same commit that does it.
 
 ## Structure
 
-- **`RawConfig` → `Config`.** `Config` is only consistent after `parse()`
-  (`raw_buttons` vs. `#[serde(skip)] buttons`, a public field). Deserialize
-  into a private `RawConfig` and build `Config` with
-  `#[serde(try_from = "RawConfig")]`.
 - **Per-stick settings.** `Axis` is mapped to its settings by three parallel
   `match`es in `src/config.rs`. A struct per stick would remove them, but it
   changes the config file format (`[sticks.left]` …), so it needs a
