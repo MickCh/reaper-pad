@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - docs/hardware.md: Art AG-16T measurements (analog vs digital mode) and
   diagnostic scripts in scripts/diag.
 
+### Changed
+- The button test names D-pad positions ("D-pad left-down").
+
 ### Fixed
 - Release notes in ReaPack no longer show Markdown backticks.
 - A pad button bound to one of reaper-pad's own actions (e.g. *Reload
