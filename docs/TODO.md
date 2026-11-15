@@ -1,14 +1,13 @@
 # To do
 
-Open items from the code review of 0.3.0, most useful first. Remove an item
-in the same commit that does it.
+Open items, most useful first. Remove an item in the same commit that does
+it.
 
-## Check in REAPER
+## Ideas
 
-The refactoring after 0.3.0 is unit-tested, but the REAPER side was not run
-yet. Before the next release go through [manual-tests.md](manual-tests.md),
-in particular:
-
-- a pad button bound to one of reaper-pad's own actions (was broken in 0.3.0),
-- the new `[sticks.left]` / `[sticks.right]` configuration,
-- quitting REAPER while the pad rumbles (new shutdown hook).
+- **Named action IDs.** `action:` only takes numeric IDs. Actions from
+  extensions (SWS, reaper-pad itself) and ReaScripts have text IDs such as
+  `_SWS_ABOUT` or `_REAPER_PAD_TEST`, and their numbers are assigned per
+  session, so they cannot be bound today. Accept `action:_NAME` and resolve
+  it with `NamedCommandLookup` when the configuration is loaded (report
+  unknown names like other config errors).

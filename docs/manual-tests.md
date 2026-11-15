@@ -19,9 +19,9 @@ Start REAPER from a terminal to see the `[reaper-pad]` lines.
       state shows in the action list / toolbar.
 - [ ] *Button test (console)*: buttons, axes and D-pad positions are printed
       ("D-pad left-down"), REAPER is not controlled; running it again ends it.
-- [ ] Bind one of these actions to a pad button
-      (`N = "action:<id>"`, the ID from the action list). Pressing it works
-      exactly like running it from the action list.
+- [ ] (Optional) A pad button bound to one of these actions works like
+      running it from the action list. Only reachable with the action's
+      numeric ID, which REAPER assigns per session (see TODO: named IDs).
 
 ## Gamepad
 
@@ -35,5 +35,6 @@ Start REAPER from a terminal to see the `[reaper-pad]` lines.
 
 ## Shutdown
 
-- [ ] Quit REAPER during a rumble (e.g. right after starting to record): the
-      pad stops vibrating, REAPER exits cleanly.
+- [ ] Quit REAPER: it exits cleanly, no hang, no errors in the terminal.
+      (Stopping a running rumble on exit is a safeguard; rumbles last at most
+      0.4 s, so it is not practical to test.)
