@@ -71,6 +71,14 @@ Fixed:
         <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.1/reaper_pad-x64.dll</source>
         <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.1/reaper_pad-x86_64.so</source>
       </version>
+      <version name="0.4.2" author="MickCh" time="2026-11-15T20:44:14Z">
+        <changelog>Changed:
+- Internal clean-up, no change in behaviour: command names and REAPER
+  action IDs are checked at compile time, typed errors for invalid
+  commands, rumble feedback separated from input handling.</changelog>
+        <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.2/reaper_pad-x64.dll</source>
+        <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.2/reaper_pad-x86_64.so</source>
+      </version>
     </reapack>
   </category>
   <metadata>
