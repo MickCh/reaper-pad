@@ -284,10 +284,15 @@ impl Axis {
 impl Config {
     /// Parse and validate a configuration.
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        let raw: RawConfig = toml::from_str(text).map_err(|e| match renamed_options(text) {
-            Some(hint) => ConfigError::Invalid(hint),
-            None => ConfigError::Syntax(e),
-        })?;
+        Self::parse_current(text).map_err(|e| match e {
+            ConfigError::Syntax(_) => renamed_options(text).map_or(e, ConfigError::Invalid),
+            ConfigError::Invalid(_) => e,
+        })
+    }
+
+    /// [`Self::parse`] without the hints for options from 0.3.
+    fn parse_current(text: &str) -> Result<Self, ConfigError> {
+        let raw: RawConfig = toml::from_str(text).map_err(ConfigError::Syntax)?;
         raw.try_into()
     }
 
@@ -390,12 +395,14 @@ const RENAMED: [(&str, &str, &str, &str); 12] = [
 ];
 
 /// If the file uses option names from before 0.4, say where they moved,
-/// and what else is wrong once they are in their new place (the first
-/// unknown option stops parsing, so those errors would only show up later).
-/// Only called for a file that did not parse, so it may be slow.
+/// and what else is wrong (the first unknown option stops parsing, so those
+/// errors would otherwise only show up after fixing it). Only called for a
+/// file that did not parse, so it may be slow.
 fn renamed_options(text: &str) -> Option<String> {
     let mut table: toml::Table = toml::from_str(text).ok()?;
     let mut moved = Vec::new();
+    // Whether every old option could be put in its new place.
+    let mut migrated = true;
     for &(section, old, new_section, new) in &RENAMED {
         let Some(value) = table
             .get_mut(section)
@@ -405,15 +412,7 @@ fn renamed_options(text: &str) -> Option<String> {
             continue;
         };
         moved.push(format!("  [{section}] {old} → [{new_section}] {new}"));
-        let mut target = &mut table;
-        for part in new_section.split('.') {
-            target = target
-                .entry(part)
-                .or_insert_with(|| toml::Value::Table(toml::Table::new()))
-                .as_table_mut()?;
-        }
-        // An option already set under the new name wins.
-        target.entry(new).or_insert(value);
+        migrated &= insert_at(&mut table, new_section, new, value);
     }
     if moved.is_empty() {
         return None;
@@ -422,14 +421,82 @@ fn renamed_options(text: &str) -> Option<String> {
         "options renamed in reaper-pad 0.4 (see the default config.toml):\n{}",
         moved.join("\n")
     );
-    let rest = toml::Value::Table(table)
-        .try_into::<RawConfig>()
-        .map_err(|e| ConfigError::Syntax(e).to_string())
-        .and_then(|raw| Config::try_from(raw).map_err(|e| e.to_string()));
+    // The rest of the file first: parsed as written, the errors have line
+    // numbers. Then the old options' values, in their new place.
+    let rest = match without_renamed(text).map(|t| Config::parse_current(&t)) {
+        Some(Err(e)) => Some(e.to_string()),
+        _ if !migrated => None,
+        _ => toml::Value::Table(table)
+            .try_into::<RawConfig>()
+            .map_err(|e| ConfigError::Syntax(e).to_string())
+            .and_then(|raw| Config::try_from(raw).map_err(|e| e.to_string()))
+            .err(),
+    };
     Some(match rest {
-        Ok(_) => msg,
-        Err(e) => format!("{msg}\nalso: {}", e.trim_end()),
+        Some(e) => format!("{msg}\nalso: {}", e.trim_end()),
+        None => msg,
     })
+}
+
+/// Put `value` at `key` in the dotted `section`, unless it is already set
+/// there (the new name wins). `false` if something other than a table is in
+/// the way.
+fn insert_at(table: &mut toml::Table, section: &str, key: &str, value: toml::Value) -> bool {
+    let mut target = table;
+    for part in section.split('.') {
+        let next = target
+            .entry(part)
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        let Some(t) = next.as_table_mut() else {
+            return false;
+        };
+        target = t;
+    }
+    target.entry(key).or_insert(value);
+    true
+}
+
+/// The sections that had options renamed, with where each value is.
+#[derive(Deserialize)]
+struct OldSections {
+    #[serde(default)]
+    sticks: HashMap<String, toml::Spanned<toml::Value>>,
+    #[serde(default)]
+    pad: HashMap<String, toml::Spanned<toml::Value>>,
+}
+
+/// `text` with the lines of the old options blanked out (so line numbers
+/// stay the same). `None` if an old option is not on a `key = value` line
+/// of its own, e.g. in an inline table.
+fn without_renamed(text: &str) -> Option<String> {
+    let sections: OldSections = toml::from_str(text).ok()?;
+    let mut bytes = text.as_bytes().to_vec();
+    for &(section, old, ..) in &RENAMED {
+        let entries = if section == "pad" {
+            &sections.pad
+        } else {
+            &sections.sticks
+        };
+        let Some(value) = entries.get(old) else {
+            continue;
+        };
+        let span = value.span();
+        let line_start = text[..span.start].rfind('\n').map_or(0, |i| i + 1);
+        let key = text[line_start..span.start]
+            .trim()
+            .strip_suffix('=')?
+            .trim();
+        if key != old {
+            return None;
+        }
+        for b in &mut bytes[line_start..span.end] {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    }
+    // Whole characters were replaced with ASCII spaces.
+    String::from_utf8(bytes).ok()
 }
 
 #[cfg(test)]
@@ -499,6 +566,7 @@ mod tests {
             .to_string();
         assert!(err.contains("axis_left_x → [sticks.left] axis_x"), "{err}");
         assert!(err.contains("also:") && err.contains("rumbl"), "{err}");
+        assert!(err.contains("line 3"), "line of the original file: {err}");
         let err = Config::parse("[sticks]\nleft_x = \"zoom\"\n")
             .unwrap_err()
             .to_string();
@@ -512,6 +580,31 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("rumbl"), "{err}");
+    }
+
+    #[test]
+    fn renamed_options_are_listed_even_in_unusual_files() {
+        // Something other than a table where the new section goes.
+        let err = Config::parse("[sticks]\nleft = 5\nleft_x = \"scroll_x\"\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("[sticks] left_x → [sticks.left] x"), "{err}");
+        assert!(err.contains("also:") && err.contains("line 2"), "{err}");
+        // An inline table: no line to blank out, the rest is still checked.
+        let err = Config::parse("sticks = { left_x = \"scroll_x\", deadzon = 1 }\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("[sticks] left_x → [sticks.left] x"), "{err}");
+        assert!(err.contains("also:") && err.contains("deadzon"), "{err}");
+    }
+
+    #[test]
+    fn blanking_keeps_line_numbers() {
+        let text = "[sticks]\nleft_x = \"scroll_x\" # ü\ndeadzone = 0.2\n";
+        let blanked = without_renamed(text).unwrap();
+        assert_eq!(blanked.lines().count(), text.lines().count());
+        assert!(!blanked.contains("left_x") && blanked.contains("# ü"));
+        assert!(without_renamed("sticks = { left_x = \"scroll_x\" }\n").is_none());
     }
 
     #[test]
