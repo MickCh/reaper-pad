@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-15
+
 ### Added
 - docs/hardware.md: Art AG-16T measurements (analog vs digital mode) and
   diagnostic scripts in scripts/diag.
@@ -13,8 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Configuration format:** stick settings moved into `[sticks.left]` and
   `[sticks.right]` (`x`, `y`, `speed`, `invert_y`, `axis_x`, `axis_y`);
   `[sticks]` keeps the shared ones. Replaces `left_x`, `speed_left`,
-  `invert_left_y` etc. and `[pad] axis_*`. Old files report the old names
-  as unknown; see the default `config.toml`.
+  `invert_left_y` etc. and `[pad] axis_*`. Update your `reaper-pad.toml`:
+  the old names are reported as unknown options (see the default
+  `config.toml`).
 - The button test names D-pad positions ("D-pad left-down").
 - The gamepad is closed (and its motors stopped) when REAPER exits.
 
