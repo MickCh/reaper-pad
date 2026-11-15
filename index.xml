@@ -86,6 +86,13 @@ Fixed:
         <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.3/reaper_pad-x64.dll</source>
         <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.3/reaper_pad-x86_64.so</source>
       </version>
+      <version name="0.4.4" author="MickCh" time="2026-11-15T22:09:38Z">
+        <changelog>Changed:
+- Errors reported together with renamed 0.3 options show their line in
+  the file, and the renamed options are listed in unusual files too.</changelog>
+        <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.4/reaper_pad-x64.dll</source>
+        <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.4/reaper_pad-x86_64.so</source>
+      </version>
     </reapack>
   </category>
   <metadata>
