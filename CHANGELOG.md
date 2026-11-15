@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-15
+
 ### Changed
 - A configuration with options from 0.3 also reports its other errors at
   once, not only after the renamed options are fixed.
