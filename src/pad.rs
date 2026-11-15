@@ -17,7 +17,17 @@ pub struct Pad {
     js: JoystickSubsystem,
     events: EventPump,
     joy: Option<Joystick>,
+    /// Dropped last: SDL shuts down when its last handle goes.
     _sdl: Sdl,
+}
+
+impl Drop for Pad {
+    fn drop(&mut self) {
+        // Some platforms only end a rumble on the next poll, which won't come.
+        if let Some(joy) = self.joy.as_mut() {
+            let _ = joy.set_rumble(0, 0, 0);
+        }
+    }
 }
 
 impl Pad {

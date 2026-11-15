@@ -273,6 +273,12 @@ extern "C" fn timer() {
     }
 }
 
+/// REAPER is about to close: stop the motors and shut down the pad and SDL
+/// while REAPER is still intact. Later timer calls find no state.
+extern "C" fn at_exit() {
+    with_state(|s| drop(s.take()));
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 
@@ -473,7 +479,9 @@ fn plugin_main(context: PluginContext) -> Result<(), Box<dyn Error>> {
     }
 
     session.plugin_register_add_timer(timer)?;
-    // The session must live as long as REAPER (timer and action registrations).
+    session.plugin_register_add_at_exit(at_exit)?;
+    // The session must live as long as REAPER (timer and action registrations);
+    // the gamepad is shut down in `at_exit`.
     Box::leak(Box::new(session));
     Ok(())
 }
