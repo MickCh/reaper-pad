@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `invert_left_y` etc. and `[pad] axis_*`. Old files report the old names
   as unknown; see the default `config.toml`.
 - The button test names D-pad positions ("D-pad left-down").
+- The gamepad is closed (and its motors stopped) when REAPER exits.
 
 ### Fixed
 - Release notes in ReaPack no longer show Markdown backticks.
