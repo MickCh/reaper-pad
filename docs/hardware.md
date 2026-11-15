@@ -35,7 +35,7 @@ both right-stick axes sit at the same value just below the centre for
 ## Quirks
 
 - Face buttons bounce: one click can register 2–3 presses → `debounce_ms`.
-- The left stick's Y axis is upside down for scrolling → `invert_left_y`.
+- The left stick's Y axis is upside down for scrolling → `invert_y` in `[sticks.left]`.
 - SDL ignores the pad while another window has focus unless
   `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1` (set by reaper-pad).
 - On Linux SDL ends a rumble only on the next poll. REAPER's timer stalls

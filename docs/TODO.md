@@ -5,10 +5,6 @@ in the same commit that does it.
 
 ## Structure
 
-- **Per-stick settings.** `Axis` is mapped to its settings by three parallel
-  `match`es in `src/config.rs`. A struct per stick would remove them, but it
-  changes the config file format (`[sticks.left]` …), so it needs a
-  migration path for existing `reaper-pad.toml` files.
 - **Split `Sink` (ISP).** It combines running commands, querying the
   recording state and logging. Fine at this size; split the logger off if
   the trait grows.

@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   diagnostic scripts in scripts/diag.
 
 ### Changed
+- **Configuration format:** stick settings moved into `[sticks.left]` and
+  `[sticks.right]` (`x`, `y`, `speed`, `invert_y`, `axis_x`, `axis_y`);
+  `[sticks]` keeps the shared ones. Replaces `left_x`, `speed_left`,
+  `invert_left_y` etc. and `[pad] axis_*`. Old files report the old names
+  as unknown; see the default `config.toml`.
 - The button test names D-pad positions ("D-pad left-down").
 
 ### Fixed

@@ -114,11 +114,13 @@ The [default `config.toml`](config.toml) documents every option. In short:
 up = "action:40286"
 repeat_ms = 250
 
-[sticks]
-left_x  = "scroll_x"
-right_x = "zoom_x"
-speed_right = 0.3       # slower zoom
-invert_left_y = true
+[sticks.left]
+x = "scroll_x"
+invert_y = true
+
+[sticks.right]
+x = "zoom_x"
+speed = 0.3             # slower zoom
 
 [pad]
 debounce_ms = 120
@@ -131,13 +133,13 @@ rumble = true
 
 To find an action's ID: in the action list, right-click an action → **Copy selected action command ID**. Only numeric IDs are supported for now.
 
-**Stick speed:** `min_steps_per_sec` and `max_steps_per_sec` set the speed at a slight and at full deflection. `speed_left` and `speed_right` scale each stick. `zoom_amount` sets how much one step of smooth horizontal zoom changes.
+**Stick speed:** `min_steps_per_sec` and `max_steps_per_sec` set the speed at a slight and at full deflection. `speed` in `[sticks.left]` / `[sticks.right]` scales each stick. `zoom_amount` sets how much one step of smooth horizontal zoom changes.
 
 ### Other gamepads
 
 1. Run **reaper-pad: Button test (console)**.
 2. Press each button and move each stick. Note the numbers it prints.
-3. Adjust `[buttons]` and the `axis_*` options under `[pad]` accordingly.
+3. Adjust `[buttons]` and `axis_x` / `axis_y` in `[sticks.left]` / `[sticks.right]` accordingly.
 
 ## Troubleshooting
 
@@ -148,7 +150,7 @@ To find an action's ID: in the action list, right-click an action → **Copy sel
 | Nothing happens, no startup buzz | Start REAPER from a terminal (Linux) and look for `[reaper-pad]` lines. Check that the pad is visible to the system (`ls /dev/input/by-id/`). |
 | Pad is detected, but buttons do something else | Run the button test and fix `[buttons]`. |
 | One press triggers twice | Increase `debounce_ms`. |
-| Scrolling goes the wrong way | Use `invert_left_y` / `invert_right_y`. |
+| Scrolling goes the wrong way | Set `invert_y` in `[sticks.left]` or `[sticks.right]`. |
 | Error after editing the config | Run *Reload configuration*: the console window names the line and the problem. |
 
 ## Development
@@ -156,6 +158,7 @@ To find an action's ID: in the action list, right-click an action → **Copy sel
 ```
 src/lib.rs      REAPER side: entry point, actions, executing commands (reaper-rs)
 src/pad.rs      gamepad through SDL2: devices, events, rumble
+src/router.rs   what the input means: commands, test mode, digital mode, sticks
 src/logic.rs    debounce, D-pad repeat, stick curves, rumble scheduling
 src/command.rs  bindable commands
 src/config.rs   configuration and validation
@@ -171,7 +174,7 @@ cargo fmt --all
 Hardware measurements (analog vs digital mode, axis values) and diagnostic
 scripts: [docs/hardware.md](docs/hardware.md).
 
-The input logic (debounce, D-pad repeat, stick curves, rumble scheduling, config validation) is hardware-independent and unit-tested. SDL2 lives only in `pad.rs`, and REAPER calls only in `lib.rs` (behind the `Sink` trait).
+The input logic (debounce, D-pad repeat, stick curves, rumble scheduling, config validation) is hardware-independent and unit-tested. The event routing (`router.rs`) is tested the same way. SDL2 lives only in `pad.rs`, and REAPER calls only in `lib.rs` (behind the `Sink` trait).
 
 Pushing a tag `v*` (with a matching `## [x.y.z]` section in `CHANGELOG.md`) builds Linux and Windows releases through GitHub Actions and adds the version to the ReaPack index (`index.xml`, via `scripts/reapack_index.py`).
 

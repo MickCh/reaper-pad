@@ -202,8 +202,8 @@ impl Router {
         if !self.cfg.pad.detect_digital_mode || !self.device.is_some_and(|d| d.dragonrise) {
             return;
         }
-        let x = read_axis(self.cfg.pad.axis_right_x).unwrap_or(0);
-        let y = read_axis(self.cfg.pad.axis_right_y).unwrap_or(0);
+        let x = read_axis(self.cfg.sticks.right.axis_x).unwrap_or(0);
+        let y = read_axis(self.cfg.sticks.right.axis_y).unwrap_or(0);
         match self.mode.update(x, y, now) {
             Some(true) => {
                 sink.notice(
@@ -375,8 +375,8 @@ mod tests {
         up = "undo"
         right = "redo"
         repeat_ms = 200
-        [sticks]
-        left_x = "scroll_x"
+        [sticks.left]
+        x = "scroll_x"
         [pad]
         debounce_ms = 100
     "#;

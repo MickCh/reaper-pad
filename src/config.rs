@@ -33,7 +33,7 @@ struct RawConfig {
     #[serde(default)]
     dpad: Dpad,
     #[serde(default)]
-    sticks: Sticks,
+    sticks: RawSticks,
     #[serde(default)]
     pad: PadCfg,
 }
@@ -52,11 +52,12 @@ impl TryFrom<RawConfig> for Config {
                 )),
             })
             .collect::<Result<_, _>>()?;
-        validate(&raw.sticks)?;
+        let sticks = raw.sticks.resolve();
+        validate(&sticks)?;
         Ok(Config {
             buttons,
             dpad: raw.dpad,
-            sticks: raw.sticks,
+            sticks,
             pad: raw.pad,
         })
     }
@@ -85,39 +86,107 @@ impl Default for Dpad {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, default)]
+/// `[sticks]`: settings shared by both sticks, and one [`Stick`] each.
+#[derive(Debug)]
 pub struct Sticks {
-    pub left_x: Option<StickCommand>,
-    pub left_y: Option<StickCommand>,
-    pub right_x: Option<StickCommand>,
-    pub right_y: Option<StickCommand>,
+    pub left: Stick,
+    pub right: Stick,
     pub deadzone: f32,
     pub min_steps_per_sec: f32,
     pub max_steps_per_sec: f32,
-    pub speed_left: f32,
-    pub speed_right: f32,
-    pub invert_left_y: bool,
-    pub invert_right_y: bool,
     /// Smooth horizontal zoom: REAPER zoom amount per stick step.
     pub zoom_amount: f64,
 }
 
-impl Default for Sticks {
+/// `[sticks.left]` / `[sticks.right]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Stick {
+    /// Command for the horizontal axis.
+    pub x: Option<StickCommand>,
+    /// Command for the vertical axis.
+    pub y: Option<StickCommand>,
+    /// Speed multiplier (lower = slower).
+    pub speed: f32,
+    /// Invert the vertical direction.
+    pub invert_y: bool,
+    /// Hardware axis numbers as reported by SDL.
+    pub axis_x: u32,
+    pub axis_y: u32,
+}
+
+impl Stick {
+    /// Defaults per side: only the axis numbers differ (they fit most
+    /// twin-stick pads).
+    fn default_for(axis_x: u32, axis_y: u32) -> Self {
+        Stick {
+            x: None,
+            y: None,
+            speed: 1.0,
+            invert_y: false,
+            axis_x,
+            axis_y,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+struct RawSticks {
+    left: RawStick,
+    right: RawStick,
+    deadzone: f32,
+    min_steps_per_sec: f32,
+    max_steps_per_sec: f32,
+    zoom_amount: f64,
+}
+
+impl Default for RawSticks {
     fn default() -> Self {
-        Sticks {
-            left_x: None,
-            left_y: None,
-            right_x: None,
-            right_y: None,
+        RawSticks {
+            left: RawStick::default(),
+            right: RawStick::default(),
             deadzone: 0.15,
             min_steps_per_sec: 3.0,
             max_steps_per_sec: 40.0,
-            speed_left: 1.0,
-            speed_right: 1.0,
-            invert_left_y: false,
-            invert_right_y: false,
             zoom_amount: 0.2,
+        }
+    }
+}
+
+impl RawSticks {
+    fn resolve(self) -> Sticks {
+        Sticks {
+            left: self.left.or(Stick::default_for(0, 1)),
+            right: self.right.or(Stick::default_for(3, 4)),
+            deadzone: self.deadzone,
+            min_steps_per_sec: self.min_steps_per_sec,
+            max_steps_per_sec: self.max_steps_per_sec,
+            zoom_amount: self.zoom_amount,
+        }
+    }
+}
+
+/// A stick as written: anything left out comes from that side's defaults.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawStick {
+    x: Option<StickCommand>,
+    y: Option<StickCommand>,
+    speed: Option<f32>,
+    invert_y: Option<bool>,
+    axis_x: Option<u32>,
+    axis_y: Option<u32>,
+}
+
+impl RawStick {
+    fn or(self, d: Stick) -> Stick {
+        Stick {
+            x: self.x.or(d.x),
+            y: self.y.or(d.y),
+            speed: self.speed.unwrap_or(d.speed),
+            invert_y: self.invert_y.unwrap_or(d.invert_y),
+            axis_x: self.axis_x.unwrap_or(d.axis_x),
+            axis_y: self.axis_y.unwrap_or(d.axis_y),
         }
     }
 }
@@ -132,10 +201,6 @@ pub struct PadCfg {
     /// Warn about (and ignore buttons 1–4 in) the digital mode of DragonRise
     /// pads such as the Art AG-16T.
     pub detect_digital_mode: bool,
-    pub axis_left_x: u32,
-    pub axis_left_y: u32,
-    pub axis_right_x: u32,
-    pub axis_right_y: u32,
 }
 
 impl Default for PadCfg {
@@ -144,10 +209,6 @@ impl Default for PadCfg {
             debounce_ms: 120,
             rumble: true,
             detect_digital_mode: true,
-            axis_left_x: 0,
-            axis_left_y: 1,
-            axis_right_x: 3,
-            axis_right_y: 4,
         }
     }
 }
@@ -183,42 +244,38 @@ impl Config {
         self.buttons.get(&num)
     }
 
-    pub fn stick_command(&self, axis: Axis) -> Option<&StickCommand> {
+    /// The stick an axis belongs to, and whether it is the vertical one.
+    fn stick(&self, axis: Axis) -> (&Stick, bool) {
         let s = &self.sticks;
         match axis {
-            Axis::LeftX => s.left_x.as_ref(),
-            Axis::LeftY => s.left_y.as_ref(),
-            Axis::RightX => s.right_x.as_ref(),
-            Axis::RightY => s.right_y.as_ref(),
+            Axis::LeftX => (&s.left, false),
+            Axis::LeftY => (&s.left, true),
+            Axis::RightX => (&s.right, false),
+            Axis::RightY => (&s.right, true),
         }
+    }
+
+    pub fn stick_command(&self, axis: Axis) -> Option<&StickCommand> {
+        let (st, vertical) = self.stick(axis);
+        if vertical { &st.y } else { &st.x }.as_ref()
     }
 
     /// Hardware axis index for a stick axis.
     pub fn axis_index(&self, axis: Axis) -> u32 {
-        let p = &self.pad;
-        match axis {
-            Axis::LeftX => p.axis_left_x,
-            Axis::LeftY => p.axis_left_y,
-            Axis::RightX => p.axis_right_x,
-            Axis::RightY => p.axis_right_y,
-        }
+        let (st, vertical) = self.stick(axis);
+        if vertical { st.axis_y } else { st.axis_x }
     }
 
     pub fn axis_params(&self, axis: Axis) -> AxisParams {
+        let (st, vertical) = self.stick(axis);
         let s = &self.sticks;
-        let (speed, flip) = match axis {
-            Axis::LeftX => (s.speed_left, false),
-            // Gamepads report "up" as negative; flip so that up means up.
-            Axis::LeftY => (s.speed_left, !s.invert_left_y),
-            Axis::RightX => (s.speed_right, false),
-            Axis::RightY => (s.speed_right, !s.invert_right_y),
-        };
         AxisParams {
             deadzone: s.deadzone,
             min_steps_per_sec: s.min_steps_per_sec,
             max_steps_per_sec: s.max_steps_per_sec,
-            speed,
-            flip,
+            speed: st.speed,
+            // Gamepads report "up" as negative; flip so that up means up.
+            flip: vertical && !st.invert_y,
         }
     }
 }
@@ -230,8 +287,6 @@ fn validate(s: &Sticks) -> Result<(), String> {
         ("deadzone", f64::from(s.deadzone)),
         ("min_steps_per_sec", f64::from(s.min_steps_per_sec)),
         ("max_steps_per_sec", f64::from(s.max_steps_per_sec)),
-        ("speed_left", f64::from(s.speed_left)),
-        ("speed_right", f64::from(s.speed_right)),
         ("zoom_amount", s.zoom_amount),
     ] {
         if !v.is_finite() {
@@ -250,8 +305,13 @@ fn validate(s: &Sticks) -> Result<(), String> {
     if s.zoom_amount < 0.0 {
         return Err("[sticks] zoom_amount must not be negative".into());
     }
-    if s.speed_left < 0.0 || s.speed_right < 0.0 {
-        return Err("[sticks] speed_left/speed_right must not be negative".into());
+    for (side, st) in [("left", &s.left), ("right", &s.right)] {
+        if !st.speed.is_finite() || st.speed < 0.0 {
+            return Err(format!(
+                "[sticks.{side}] speed must be a non-negative number (got {})",
+                st.speed
+            ));
+        }
     }
     Ok(())
 }
@@ -292,6 +352,11 @@ mod tests {
         assert!(err.contains("deadzon"), "{err}");
         let err = Config::parse("[stickz]\n").unwrap_err();
         assert!(err.contains("stickz"), "{err}");
+        let err = Config::parse("[sticks.left]\ninvert_x = true\n").unwrap_err();
+        assert!(err.contains("invert_x"), "{err}");
+        // The 0.3 names are gone.
+        assert!(Config::parse("[sticks]\nleft_x = \"scroll_x\"\n").is_err());
+        assert!(Config::parse("[pad]\naxis_left_x = 0\n").is_err());
     }
 
     #[test]
@@ -312,20 +377,21 @@ mod tests {
         assert!(
             Config::parse("[sticks]\nmin_steps_per_sec = 50\nmax_steps_per_sec = 10\n").is_err()
         );
-        assert!(Config::parse("[sticks]\nspeed_left = -1\n").is_err());
         for bad in [
             "min_steps_per_sec = nan",
             "max_steps_per_sec = inf",
-            "speed_left = nan",
-            "speed_right = -inf",
             "zoom_amount = inf",
             "deadzone = nan",
         ] {
             let err = Config::parse(&format!("[sticks]\n{bad}\n")).unwrap_err();
             assert!(err.contains("[sticks]"), "{bad}: {err}");
         }
+        for bad in ["speed = -1", "speed = nan", "speed = -inf"] {
+            let err = Config::parse(&format!("[sticks.right]\n{bad}\n")).unwrap_err();
+            assert!(err.contains("[sticks.right] speed"), "{bad}: {err}");
+        }
         assert!(
-            Config::parse("[sticks]\nleft_x = \"play\"\n")
+            Config::parse("[sticks.left]\nx = \"play\"\n")
                 .unwrap_err()
                 .contains("unknown stick command")
         );
@@ -333,7 +399,7 @@ mod tests {
 
     #[test]
     fn y_axes_are_flipped_unless_inverted() {
-        let c = Config::parse("[sticks]\ninvert_left_y = true\n").unwrap();
+        let c = Config::parse("[sticks.left]\ninvert_y = true\n").unwrap();
         assert!(!c.axis_params(Axis::LeftY).flip);
         assert!(c.axis_params(Axis::RightY).flip);
         assert!(!c.axis_params(Axis::LeftX).flip);
@@ -341,8 +407,31 @@ mod tests {
 
     #[test]
     fn per_stick_speed() {
-        let c = Config::parse("[sticks]\nspeed_left = 2.0\nspeed_right = 0.3\n").unwrap();
+        let c = Config::parse("[sticks.left]\nspeed = 2.0\n[sticks.right]\nspeed = 0.3\n").unwrap();
         assert_eq!(c.axis_params(Axis::LeftX).speed, 2.0);
         assert_eq!(c.axis_params(Axis::RightY).speed, 0.3);
+    }
+
+    #[test]
+    fn stick_settings_fall_back_to_their_side() {
+        let c = Config::parse("[sticks.right]\ny = \"zoom_y\"\naxis_x = 2\n").unwrap();
+        assert_eq!(c.stick_command(Axis::RightY), Some(&StickCommand::ZoomY));
+        assert_eq!(c.stick_command(Axis::RightX), None);
+        assert_eq!(c.axis_index(Axis::RightX), 2);
+        assert_eq!(c.axis_index(Axis::RightY), 4, "right default");
+        assert_eq!(c.axis_index(Axis::LeftX), 0, "left default");
+        assert_eq!(c.axis_index(Axis::LeftY), 1, "left default");
+        assert_eq!(c.axis_params(Axis::RightX).speed, 1.0);
+    }
+
+    #[test]
+    fn default_config_layout() {
+        let c = Config::parse(DEFAULT_CONFIG).unwrap();
+        assert_eq!(c.stick_command(Axis::LeftX), Some(&StickCommand::ScrollX));
+        assert_eq!(c.stick_command(Axis::LeftY), Some(&StickCommand::ScrollY));
+        assert_eq!(c.stick_command(Axis::RightY), Some(&StickCommand::ZoomY));
+        assert!(!c.axis_params(Axis::LeftY).flip, "left Y inverted");
+        assert_eq!(c.axis_params(Axis::RightX).speed, 0.3);
+        assert_eq!(c.axis_index(Axis::RightY), 4);
     }
 }

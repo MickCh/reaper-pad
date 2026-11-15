@@ -37,18 +37,31 @@ right = "action:40647"  # View: Move cursor right to grid division
 repeat_ms = 250         # auto-repeat interval while held
 
 [sticks]
-left_x  = "scroll_x"    # left stick horizontal  → scroll in time
-left_y  = "scroll_y"    # left stick vertical    → scroll tracks
-right_x = "zoom_x"      # right stick horizontal → zoom in time (smooth)
-right_y = "zoom_y"      # right stick vertical   → track height
 deadzone = 0.15         # ignore small deflections (worn sticks rarely centre perfectly)
 min_steps_per_sec = 3   # speed at a slight deflection
 max_steps_per_sec = 40  # speed at full deflection
-speed_left = 1.0        # speed multiplier for the left stick (lower = slower)
-speed_right = 0.3       # speed multiplier for the right stick
-invert_left_y = true    # invert the vertical direction of the left stick
-invert_right_y = false  # invert the vertical direction of the right stick
 zoom_amount = 0.2       # smooth horizontal zoom: amount per stick step
+
+# Per stick: x/y = command for the horizontal/vertical axis, speed =
+# multiplier (lower = slower), invert_y = flip the vertical direction,
+# axis_x/axis_y = axis numbers as reported by SDL. The axis defaults fit most
+# twin-stick pads; on the Art AG-16T the mode LED must be red (analog), not
+# green (digital).
+[sticks.left]
+x = "scroll_x"          # scroll in time
+y = "scroll_y"          # scroll tracks
+speed = 1.0
+invert_y = true
+axis_x = 0
+axis_y = 1
+
+[sticks.right]
+x = "zoom_x"            # zoom in time (smooth)
+y = "zoom_y"            # track height
+speed = 0.3
+invert_y = false
+axis_x = 3
+axis_y = 4
 
 [pad]
 debounce_ms = 120       # ignore contact bounce (old pads may register 2–3 presses per click)
@@ -57,9 +70,3 @@ rumble = true           # vibrate on startup and when recording starts/stops
 # where the right stick presses buttons 1–4. Buzzes three times, prints a
 # warning and ignores buttons 1–4 until the Analog button is pressed (LED red).
 detect_digital_mode = true
-# Axis numbers as reported by SDL. Defaults fit most twin-stick pads;
-# on the Art AG-16T the mode LED must be red (analog), not green (digital).
-axis_left_x = 0
-axis_left_y = 1
-axis_right_x = 3
-axis_right_y = 4
