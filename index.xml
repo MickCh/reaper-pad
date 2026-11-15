@@ -59,6 +59,18 @@ Fixed:
         <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.0/reaper_pad-x64.dll</source>
         <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.0/reaper_pad-x86_64.so</source>
       </version>
+      <version name="0.4.1" author="MickCh" time="2026-11-15T20:19:49Z">
+        <changelog>Changed:
+- Options from the 0.3 configuration format (left_x, speed_left,
+  [pad] axis_left_x etc.) are reported with their new place instead of
+  as unknown options.
+
+Fixed:
+- The toolbar buttons of Enable/disable gamepad and Button test no
+  longer flicker off when REAPER refreshes them while the gamepad is in use.</changelog>
+        <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.1/reaper_pad-x64.dll</source>
+        <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.1/reaper_pad-x86_64.so</source>
+      </version>
     </reapack>
   </category>
   <metadata>
