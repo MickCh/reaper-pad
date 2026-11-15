@@ -21,7 +21,7 @@ mod pad;
 mod router;
 
 use command::{Command, StickCommand};
-use config::{Config, DEFAULT_CONFIG};
+use config::{Config, DEFAULT_CONFIG, LoadError};
 use logic::{RUMBLE_HELLO, Stepper};
 use pad::Pad;
 use reaper_low::PluginContext;
@@ -33,6 +33,7 @@ use reaper_medium::{
 use router::{Log, Sink};
 use std::cell::RefCell;
 use std::error::Error;
+use std::fmt;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -194,11 +195,10 @@ fn config_path(reaper: &Reaper) -> PathBuf {
 }
 
 /// Load the configuration; write the default one on first run.
-fn load_config(reaper: &Reaper) -> Result<Config, String> {
+fn load_config(reaper: &Reaper) -> Result<Config, LoadError> {
     let path = config_path(reaper);
     if !path.exists() {
-        std::fs::write(&path, DEFAULT_CONFIG)
-            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        std::fs::write(&path, DEFAULT_CONFIG).map_err(|e| LoadError::Write(path.clone(), e))?;
         eprintln!(
             "[reaper-pad] created default configuration: {}",
             path.display()
@@ -207,10 +207,36 @@ fn load_config(reaper: &Reaper) -> Result<Config, String> {
     Config::load(&path)
 }
 
-fn init_state(reaper: &Reaper) -> Result<State, String> {
-    let cfg = load_config(reaper)?;
+/// Why the plugin could not start.
+#[derive(Debug)]
+enum InitError {
+    Config(LoadError),
+    /// SDL reports its errors as text.
+    Sdl(String),
+}
+
+impl fmt::Display for InitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InitError::Config(e) => write!(f, "{e}"),
+            InitError::Sdl(e) => write!(f, "cannot start SDL: {e}"),
+        }
+    }
+}
+
+impl Error for InitError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            InitError::Config(e) => Some(e),
+            InitError::Sdl(_) => None,
+        }
+    }
+}
+
+fn init_state(reaper: &Reaper) -> Result<State, InitError> {
+    let cfg = load_config(reaper).map_err(InitError::Config)?;
     let zoom_amount = cfg.sticks.zoom_amount;
-    let mut pad = Pad::new(cfg)?;
+    let mut pad = Pad::new(cfg).map_err(InitError::Sdl)?;
     let mut sink = ReaperSink {
         reaper: reaper.clone(),
         stepper: Stepper::default(),

@@ -5,13 +5,68 @@ use crate::command::{Command, StickCommand};
 use crate::logic::AxisParams;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::fmt;
+use std::path::{Path, PathBuf};
 
 /// The default configuration, embedded into the binaries.
 pub const DEFAULT_CONFIG: &str = include_str!("../config.toml");
 
 /// Highest button number accepted in `[buttons]`.
 pub const MAX_BUTTON: u32 = 32;
+
+/// What is wrong with a configuration.
+#[derive(Debug)]
+pub enum ConfigError {
+    /// Not valid TOML, or an unknown option or command (the message names it).
+    Syntax(toml::de::Error),
+    /// Valid TOML with an unacceptable value.
+    Invalid(String),
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigError::Syntax(e) => write!(f, "{e}"),
+            ConfigError::Invalid(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ConfigError::Syntax(e) => Some(e),
+            ConfigError::Invalid(_) => None,
+        }
+    }
+}
+
+/// A configuration file that could not be used.
+#[derive(Debug)]
+pub enum LoadError {
+    Read(PathBuf, std::io::Error),
+    Write(PathBuf, std::io::Error),
+    Config(PathBuf, ConfigError),
+}
+
+impl fmt::Display for LoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LoadError::Read(p, e) => write!(f, "cannot read {}: {e}", p.display()),
+            LoadError::Write(p, e) => write!(f, "cannot write {}: {e}", p.display()),
+            LoadError::Config(p, e) => write!(f, "error in {}: {e}", p.display()),
+        }
+    }
+}
+
+impl std::error::Error for LoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            LoadError::Read(_, e) | LoadError::Write(_, e) => Some(e),
+            LoadError::Config(_, e) => Some(e),
+        }
+    }
+}
 
 /// A parsed and validated configuration. Only built through
 /// [`Config::parse`] / [`Config::load`], so it is always valid.
@@ -39,21 +94,21 @@ struct RawConfig {
 }
 
 impl TryFrom<RawConfig> for Config {
-    type Error = String;
+    type Error = ConfigError;
 
-    fn try_from(raw: RawConfig) -> Result<Self, String> {
+    fn try_from(raw: RawConfig) -> Result<Self, ConfigError> {
         let buttons = raw
             .buttons
             .into_iter()
             .map(|(k, v)| match k.trim().parse::<u32>() {
                 Ok(n) if (1..=MAX_BUTTON).contains(&n) => Ok((n, v)),
-                _ => Err(format!(
+                _ => Err(ConfigError::Invalid(format!(
                     "[buttons]: invalid button number \"{k}\" (expected 1–{MAX_BUTTON})"
-                )),
+                ))),
             })
             .collect::<Result<_, _>>()?;
         let sticks = raw.sticks.resolve();
-        validate(&sticks)?;
+        validate(&sticks).map_err(ConfigError::Invalid)?;
         Ok(Config {
             buttons,
             dpad: raw.dpad,
@@ -228,15 +283,14 @@ impl Axis {
 
 impl Config {
     /// Parse and validate a configuration.
-    pub fn parse(text: &str) -> Result<Self, String> {
-        let raw: RawConfig = toml::from_str(text).map_err(|e| e.to_string())?;
+    pub fn parse(text: &str) -> Result<Self, ConfigError> {
+        let raw: RawConfig = toml::from_str(text).map_err(ConfigError::Syntax)?;
         raw.try_into()
     }
 
-    pub fn load(path: &Path) -> Result<Self, String> {
-        let text = std::fs::read_to_string(path)
-            .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-        Self::parse(&text).map_err(|e| format!("error in {}: {e}", path.display()))
+    pub fn load(path: &Path) -> Result<Self, LoadError> {
+        let text = std::fs::read_to_string(path).map_err(|e| LoadError::Read(path.into(), e))?;
+        Self::parse(&text).map_err(|e| LoadError::Config(path.into(), e))
     }
 
     /// Command for a button number as printed on the pad (1-based).
@@ -342,17 +396,23 @@ mod tests {
 
     #[test]
     fn unknown_command_is_reported() {
-        let err = Config::parse("[buttons]\n1 = \"plya\"\n").unwrap_err();
+        let err = Config::parse("[buttons]\n1 = \"plya\"\n")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("unknown command \"plya\""), "{err}");
     }
 
     #[test]
     fn typo_in_field_name_is_reported() {
-        let err = Config::parse("[sticks]\ndeadzon = 0.2\n").unwrap_err();
+        let err = Config::parse("[sticks]\ndeadzon = 0.2\n")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("deadzon"), "{err}");
-        let err = Config::parse("[stickz]\n").unwrap_err();
+        let err = Config::parse("[stickz]\n").unwrap_err().to_string();
         assert!(err.contains("stickz"), "{err}");
-        let err = Config::parse("[sticks.left]\ninvert_x = true\n").unwrap_err();
+        let err = Config::parse("[sticks.left]\ninvert_x = true\n")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("invert_x"), "{err}");
         // The 0.3 names are gone.
         assert!(Config::parse("[sticks]\nleft_x = \"scroll_x\"\n").is_err());
@@ -360,10 +420,30 @@ mod tests {
     }
 
     #[test]
+    fn errors_say_what_kind_they_are() {
+        assert!(matches!(
+            Config::parse("[stickz]\n"),
+            Err(ConfigError::Syntax(_))
+        ));
+        assert!(matches!(
+            Config::parse("[sticks]\ndeadzone = 2.0\n"),
+            Err(ConfigError::Invalid(_))
+        ));
+        let missing = Path::new("/nonexistent/reaper-pad.toml");
+        let err = Config::load(missing).unwrap_err();
+        assert!(matches!(err, LoadError::Read(..)));
+        assert!(
+            err.to_string().starts_with("cannot read /nonexistent/"),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn invalid_button_numbers_are_reported() {
         assert!(
             Config::parse("[buttons]\n0 = \"play\"\n")
                 .unwrap_err()
+                .to_string()
                 .contains("invalid button number")
         );
         assert!(Config::parse("[buttons]\nA = \"play\"\n").is_err());
@@ -383,16 +463,21 @@ mod tests {
             "zoom_amount = inf",
             "deadzone = nan",
         ] {
-            let err = Config::parse(&format!("[sticks]\n{bad}\n")).unwrap_err();
+            let err = Config::parse(&format!("[sticks]\n{bad}\n"))
+                .unwrap_err()
+                .to_string();
             assert!(err.contains("[sticks]"), "{bad}: {err}");
         }
         for bad in ["speed = -1", "speed = nan", "speed = -inf"] {
-            let err = Config::parse(&format!("[sticks.right]\n{bad}\n")).unwrap_err();
+            let err = Config::parse(&format!("[sticks.right]\n{bad}\n"))
+                .unwrap_err()
+                .to_string();
             assert!(err.contains("[sticks.right] speed"), "{bad}: {err}");
         }
         assert!(
             Config::parse("[sticks.left]\nx = \"play\"\n")
                 .unwrap_err()
+                .to_string()
                 .contains("unknown stick command")
         );
     }

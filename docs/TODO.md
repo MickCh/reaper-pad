@@ -3,14 +3,8 @@
 Open items from the code review of 0.3.0, most useful first. Remove an item
 in the same commit that does it.
 
-## Structure
-
-
 ## Rust
 
-- **Error type.** Errors are `String`s. They are only ever shown to the
-  user, so this is fine for now; switch to an enum (e.g. with `thiserror`)
-  once callers need to tell errors apart.
 - **Per-tick allocations.** `HatRepeat::set/tick` and `directions()` return
   `Vec`s and `Pad::poll()` collects events into a `Vec`. Harmless at 30 Hz;
   a fixed array would be more idiomatic.
