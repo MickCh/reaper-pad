@@ -39,7 +39,7 @@ pub trait Sink {
 pub struct Pad {
     cfg: Config,
     /// Only report button/axis numbers, don't send commands.
-    pub test_mode: bool,
+    test_mode: bool,
     js: JoystickSubsystem,
     events: EventPump,
     joy: Option<Joystick>,
@@ -88,6 +88,14 @@ impl Pad {
         self.axes.clear();
         self.mode.reset();
         self.cfg = cfg;
+    }
+
+    pub fn test_mode(&self) -> bool {
+        self.test_mode
+    }
+
+    pub fn set_test_mode(&mut self, on: bool) {
+        self.test_mode = on;
     }
 
     /// Name of the connected pad, if any.

@@ -157,6 +157,20 @@ impl Config {
 
     fn validate(&self) -> Result<(), String> {
         let s = &self.sticks;
+        // TOML accepts `nan` and `inf`; comparisons with NaN are always false,
+        // so the range checks below would let them through.
+        for (name, v) in [
+            ("deadzone", f64::from(s.deadzone)),
+            ("min_steps_per_sec", f64::from(s.min_steps_per_sec)),
+            ("max_steps_per_sec", f64::from(s.max_steps_per_sec)),
+            ("speed_left", f64::from(s.speed_left)),
+            ("speed_right", f64::from(s.speed_right)),
+            ("zoom_amount", s.zoom_amount),
+        ] {
+            if !v.is_finite() {
+                return Err(format!("[sticks] {name} must be a finite number (got {v})"));
+            }
+        }
         if !(0.0..1.0).contains(&s.deadzone) {
             return Err(format!(
                 "[sticks] deadzone must be between 0.0 and 1.0 (got {})",
@@ -276,6 +290,17 @@ mod tests {
             Config::parse("[sticks]\nmin_steps_per_sec = 50\nmax_steps_per_sec = 10\n").is_err()
         );
         assert!(Config::parse("[sticks]\nspeed_left = -1\n").is_err());
+        for bad in [
+            "min_steps_per_sec = nan",
+            "max_steps_per_sec = inf",
+            "speed_left = nan",
+            "speed_right = -inf",
+            "zoom_amount = inf",
+            "deadzone = nan",
+        ] {
+            let err = Config::parse(&format!("[sticks]\n{bad}\n")).unwrap_err();
+            assert!(err.contains("[sticks]"), "{bad}: {err}");
+        }
         assert!(
             Config::parse("[sticks]\nleft_x = \"play\"\n")
                 .unwrap_err()

@@ -65,19 +65,28 @@ impl Sink for ReaperSink {
 
     fn stick(&mut self, cmd: &StickCommand, delta: f32) {
         let low = self.reaper.low();
-        if *cmd == StickCommand::ZoomX {
+        // Everything except ZoomX only moves in whole steps.
+        let mut steps = || match self.stepper.steps(*cmd, delta) {
+            0 => None,
+            n => Some(n),
+        };
+        match cmd {
             // Smooth: REAPER accepts fractional zoom amounts.
-            low.adjustZoom(delta as f64 * self.zoom_amount, 0, true, -1);
-            return;
-        }
-        // The others only move in whole steps.
-        let n = self.stepper.steps(cmd.name(), delta);
-        if n != 0 {
-            match cmd {
-                StickCommand::ScrollX => low.CSurf_OnScroll(n, 0),
-                StickCommand::ScrollY => low.CSurf_OnScroll(0, n),
-                StickCommand::ZoomY => low.CSurf_OnZoom(0, n),
-                StickCommand::ZoomX => unreachable!(),
+            StickCommand::ZoomX => low.adjustZoom(f64::from(delta) * self.zoom_amount, 0, true, -1),
+            StickCommand::ScrollX => {
+                if let Some(n) = steps() {
+                    low.CSurf_OnScroll(n, 0);
+                }
+            }
+            StickCommand::ScrollY => {
+                if let Some(n) = steps() {
+                    low.CSurf_OnScroll(0, n);
+                }
+            }
+            StickCommand::ZoomY => {
+                if let Some(n) = steps() {
+                    low.CSurf_OnZoom(0, n);
+                }
             }
         }
     }
@@ -126,10 +135,28 @@ struct State {
     ticks: u32,
 }
 
+impl State {
+    /// Button test on/off. The pad stops sending commands and the sink logs
+    /// to REAPER's console; both follow from this one switch.
+    fn set_test_mode(&mut self, on: bool) {
+        self.pad.set_test_mode(on);
+        self.sink.console = on;
+    }
+}
+
 thread_local! {
     // The timer and actions are always called on REAPER's main thread.
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     static REAPER: RefCell<Option<Reaper>> = const { RefCell::new(None) };
+    /// This plugin's actions triggered while the state was in use (a pad
+    /// button bound to one of them); run by the timer once it is free.
+    static DEFERRED: RefCell<Vec<Action>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Whether the state is borrowed right now, i.e. we are being called back
+/// from inside [`with_state`].
+fn state_busy() -> bool {
+    STATE.with(|s| s.try_borrow_mut().is_err())
 }
 
 /// Run `f` on the plugin state. Safe against panics (a bug here must not take
@@ -207,6 +234,10 @@ extern "C" fn timer() {
             st.pad.poll(&mut NullSink);
         }
     });
+    let deferred = DEFERRED.with(|d| std::mem::take(&mut *d.borrow_mut()));
+    for action in deferred {
+        action.run();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +250,36 @@ struct Ids {
 }
 
 static IDS: OnceLock<Ids> = OnceLock::new();
+
+#[derive(Debug, Clone, Copy)]
+enum Action {
+    Reload,
+    Toggle,
+    Test,
+}
+
+impl Action {
+    fn from_id(id: CommandId) -> Option<Self> {
+        let ids = IDS.get()?;
+        if id == ids.reload {
+            Some(Action::Reload)
+        } else if id == ids.toggle {
+            Some(Action::Toggle)
+        } else if id == ids.test {
+            Some(Action::Test)
+        } else {
+            None
+        }
+    }
+
+    fn run(self) {
+        match self {
+            Action::Reload => reload(),
+            Action::Toggle => toggle_enabled(),
+            Action::Test => toggle_test(),
+        }
+    }
+}
 
 fn reload() {
     let Some(reaper) = reaper() else { return };
@@ -242,9 +303,12 @@ fn reload() {
         }
         None => false,
     });
-    if reloaded == Some(false) {
+    match reloaded {
+        Some(true) => {}
+        // with_state has already reported the internal error.
+        None => return,
         // Startup failed earlier (e.g. an error in the file) — start from scratch.
-        match init_state(&reaper) {
+        Some(false) => match init_state(&reaper) {
             Ok(mut st) => {
                 st.ticks = HELLO_AFTER_TICKS - 1; // rumble on the next tick
                 with_state(|s| *s = Some(st));
@@ -253,7 +317,7 @@ fn reload() {
                 reaper.show_console_msg(format!("reaper-pad: {e}\n"));
                 return;
             }
-        }
+        },
     }
     eprintln!(
         "[reaper-pad] configuration loaded: {}",
@@ -279,9 +343,9 @@ fn toggle_enabled() {
 fn toggle_test() {
     let msg = with_state(|s| {
         let st = s.as_mut()?;
-        st.pad.test_mode = !st.pad.test_mode;
-        st.sink.console = st.pad.test_mode;
-        Some(if st.pad.test_mode {
+        let on = !st.pad.test_mode();
+        st.set_test_mode(on);
+        Some(if on {
             let name = st.pad.connected().unwrap_or_else(|| "no gamepad connected".into());
             format!(
                 "reaper-pad — BUTTON TEST ({name})\n\
@@ -302,15 +366,15 @@ struct Actions;
 
 impl HookCommand for Actions {
     fn call(command_id: CommandId, _flag: i32) -> bool {
-        let Some(ids) = IDS.get() else { return false };
-        if command_id == ids.reload {
-            reload();
-        } else if command_id == ids.toggle {
-            toggle_enabled();
-        } else if command_id == ids.test {
-            toggle_test();
-        } else {
+        let Some(action) = Action::from_id(command_id) else {
             return false;
+        };
+        if state_busy() {
+            // Called from inside the timer (a pad button bound to this
+            // action): the state is in use, so run it right after.
+            DEFERRED.with(|d| d.borrow_mut().push(action));
+        } else {
+            action.run();
         }
         true
     }
@@ -324,7 +388,7 @@ impl ToggleAction for Actions {
         let on = if command_id == ids.toggle {
             with_state(|s| s.as_ref().map(|st| st.enabled)).flatten()
         } else if command_id == ids.test {
-            with_state(|s| s.as_ref().map(|st| st.pad.test_mode)).flatten()
+            with_state(|s| s.as_ref().map(|st| st.pad.test_mode())).flatten()
         } else {
             return ToggleActionResult::NotRelevant;
         };

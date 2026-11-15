@@ -1,6 +1,7 @@
 //! Hardware-independent input logic. Everything here takes time as a
 //! parameter, so it can be unit-tested without a gamepad.
 
+use crate::command::StickCommand;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -159,11 +160,11 @@ impl AxisTracker {
 /// Accumulates fractional deltas into whole steps, for targets that only
 /// understand ±1 (REAPER's CSurf scroll/zoom).
 #[derive(Debug, Default)]
-pub struct Stepper(HashMap<String, f32>);
+pub struct Stepper(HashMap<StickCommand, f32>);
 
 impl Stepper {
-    pub fn steps(&mut self, key: &str, delta: f32) -> i32 {
-        let acc = self.0.entry(key.to_string()).or_insert(0.0);
+    pub fn steps(&mut self, key: StickCommand, delta: f32) -> i32 {
+        let acc = self.0.entry(key).or_insert(0.0);
         if *acc * delta < 0.0 {
             *acc = 0.0; // direction changed: drop the leftover
         }
@@ -383,11 +384,19 @@ mod tests {
     #[test]
     fn stepper_counts_whole_steps() {
         let mut s = Stepper::default();
-        assert_eq!(s.steps("x", 1.0), 1);
-        assert_eq!(s.steps("x", 0.4), 0);
-        assert_eq!(s.steps("x", 0.7), 1);
-        assert_eq!(s.steps("x", -1.0), -1, "direction change drops leftover");
-        assert_eq!(s.steps("y", 2.5), 2, "keys are independent");
+        assert_eq!(s.steps(StickCommand::ScrollX, 1.0), 1);
+        assert_eq!(s.steps(StickCommand::ScrollX, 0.4), 0);
+        assert_eq!(s.steps(StickCommand::ScrollX, 0.7), 1);
+        assert_eq!(
+            s.steps(StickCommand::ScrollX, -1.0),
+            -1,
+            "direction change drops leftover"
+        );
+        assert_eq!(
+            s.steps(StickCommand::ScrollY, 2.5),
+            2,
+            "keys are independent"
+        );
     }
 
     #[test]
