@@ -32,3 +32,16 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
+
+  msrv:
+    name: MSRV (rust-version from Cargo.toml)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Keep in sync with `rust-version` in Cargo.toml.
+      - uses: dtolnay/rust-toolchain@1.88
+      - name: Install SDL2
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - uses: Swatinem/rust-cache@v2
+      - name: Check
+        run: cargo check --all-targets
