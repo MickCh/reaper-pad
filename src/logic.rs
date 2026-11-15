@@ -44,6 +44,20 @@ pub enum Direction {
     Right,
 }
 
+/// The directions of one D-pad position: up to two (a diagonal), without
+/// allocating. Vertical comes first.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Directions([Option<Direction>; 2]);
+
+impl IntoIterator for Directions {
+    type Item = Direction;
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<Direction>, 2>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter().flatten()
+    }
+}
+
 /// D-pad with auto-repeat while held.
 #[derive(Debug)]
 pub struct HatRepeat {
@@ -67,41 +81,40 @@ impl HatRepeat {
 
     /// New D-pad position `(x, y)`, with x: -1 = left, y: 1 = up.
     /// Fires immediately on any non-neutral position.
-    pub fn set(&mut self, state: (i8, i8), now: Instant) -> Vec<Direction> {
+    pub fn set(&mut self, state: (i8, i8), now: Instant) -> Directions {
         self.state = state;
         if state == (0, 0) {
             self.next = None;
-            return Vec::new();
+            return Directions::default();
         }
         self.next = Some(now + self.interval);
         directions(state)
     }
 
     /// Repeats while the D-pad is held.
-    pub fn tick(&mut self, now: Instant) -> Vec<Direction> {
+    pub fn tick(&mut self, now: Instant) -> Directions {
         match self.next {
             Some(t) if now >= t => {
                 self.next = Some(now + self.interval);
                 directions(self.state)
             }
-            _ => Vec::new(),
+            _ => Directions::default(),
         }
     }
 }
 
-fn directions((x, y): (i8, i8)) -> Vec<Direction> {
-    let mut d = Vec::new();
-    match y {
-        1 => d.push(Direction::Up),
-        -1 => d.push(Direction::Down),
-        _ => {}
-    }
-    match x {
-        -1 => d.push(Direction::Left),
-        1 => d.push(Direction::Right),
-        _ => {}
-    }
-    d
+fn directions((x, y): (i8, i8)) -> Directions {
+    let vertical = match y {
+        1 => Some(Direction::Up),
+        -1 => Some(Direction::Down),
+        _ => None,
+    };
+    let horizontal = match x {
+        -1 => Some(Direction::Left),
+        1 => Some(Direction::Right),
+        _ => None,
+    };
+    Directions([vertical, horizontal])
 }
 
 /// Parameters for one stick axis.
@@ -297,6 +310,10 @@ mod tests {
         Duration::from_millis(n)
     }
 
+    fn dirs(d: Directions) -> Vec<Direction> {
+        d.into_iter().collect()
+    }
+
     #[test]
     fn debouncer_ignores_bounces_but_not_other_buttons() {
         let t0 = Instant::now();
@@ -312,21 +329,25 @@ mod tests {
     fn hat_fires_immediately_and_repeats() {
         let t0 = Instant::now();
         let mut h = HatRepeat::new(ms(250));
-        assert_eq!(h.set((0, 1), t0), vec![Direction::Up]);
-        assert!(h.tick(t0 + ms(100)).is_empty());
-        assert_eq!(h.tick(t0 + ms(250)), vec![Direction::Up]);
-        assert!(h.tick(t0 + ms(300)).is_empty());
-        assert!(h.set((0, 0), t0 + ms(310)).is_empty());
-        assert!(h.tick(t0 + ms(1000)).is_empty(), "released: no repeat");
+        assert_eq!(dirs(h.set((0, 1), t0)), vec![Direction::Up]);
+        assert!(dirs(h.tick(t0 + ms(100))).is_empty());
+        assert_eq!(dirs(h.tick(t0 + ms(250))), vec![Direction::Up]);
+        assert!(dirs(h.tick(t0 + ms(300))).is_empty());
+        assert!(dirs(h.set((0, 0), t0 + ms(310))).is_empty());
+        assert!(
+            dirs(h.tick(t0 + ms(1000))).is_empty(),
+            "released: no repeat"
+        );
     }
 
     #[test]
     fn hat_diagonal_gives_two_directions() {
         let mut h = HatRepeat::new(ms(250));
         assert_eq!(
-            h.set((1, -1), Instant::now()),
+            dirs(h.set((1, -1), Instant::now())),
             vec![Direction::Down, Direction::Right]
         );
+        assert!(dirs(directions((0, 0))).is_empty());
     }
 
     fn params() -> AxisParams {

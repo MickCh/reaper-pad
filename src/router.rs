@@ -6,8 +6,8 @@
 use crate::command::{Command, StickCommand};
 use crate::config::{Axis, Config};
 use crate::logic::{
-    AxisTracker, Debouncer, Direction, HatRepeat, ModeDetector, MotorCmd, Pattern, RUMBLE_DIGITAL,
-    RUMBLE_START, RUMBLE_STOP, RumbleQueue,
+    AxisTracker, Debouncer, Direction, Directions, HatRepeat, ModeDetector, MotorCmd, Pattern,
+    RUMBLE_DIGITAL, RUMBLE_START, RUMBLE_STOP, RumbleQueue,
 };
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -147,7 +147,7 @@ impl Router {
             InputEvent::Button(idx) => self.button(idx, now, sink),
             InputEvent::Hat(xy) => {
                 let dirs = self.hat.set(xy, now);
-                self.dpad(&dirs, sink);
+                self.dpad(dirs, sink);
             }
             // Sticks are read in `tick`.
             InputEvent::Axis(..) => {}
@@ -175,7 +175,7 @@ impl Router {
             self.on_record(on, now, sink);
         }
         let dirs = self.hat.tick(now);
-        self.dpad(&dirs, sink);
+        self.dpad(dirs, sink);
         self.sticks(dt, &read_axis, sink);
     }
 
@@ -241,7 +241,7 @@ impl Router {
         }
     }
 
-    fn dpad(&self, dirs: &[Direction], sink: &mut dyn Sink) {
+    fn dpad(&self, dirs: Directions, sink: &mut dyn Sink) {
         let d = &self.cfg.dpad;
         for dir in dirs {
             let cmd = match dir {

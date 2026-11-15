@@ -5,9 +5,6 @@ in the same commit that does it.
 
 ## Rust
 
-- **Per-tick allocations.** `HatRepeat::set/tick` and `directions()` return
-  `Vec`s and `Pad::poll()` collects events into a `Vec`. Harmless at 30 Hz;
-  a fixed array would be more idiomatic.
 - **SDL is never shut down** when REAPER exits (`Box::leak` of the session is
   intentional). Harmless in practice.
 - **`clippy::pedantic`.** About 24 warnings, mostly `as` casts that could be

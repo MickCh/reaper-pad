@@ -70,7 +70,7 @@ impl Pad {
             )),
             None => log.log("Waiting for a gamepad…"),
         }
-        self.set_joy(joy);
+        attach(&mut self.router, &mut self.joy, joy);
     }
 
     pub fn rumble(&mut self, pattern: Pattern) {
@@ -80,8 +80,8 @@ impl Pad {
     /// Handle events, sticks and rumble. Call regularly (REAPER's timer, ~30×/s).
     pub fn poll(&mut self, sink: &mut dyn Sink) {
         let now = Instant::now();
-        let events: Vec<Event> = self.events.poll_iter().collect();
-        for ev in events {
+        // Borrows only `self.events`; the loop uses the other fields.
+        for ev in self.events.poll_iter() {
             match ev {
                 Event::JoyDeviceAdded { which, .. } => {
                     if self.joy.is_none() {
@@ -89,7 +89,7 @@ impl Pad {
                         if let Some(j) = &joy {
                             sink.log(&format!("Gamepad connected: {}", j.name()));
                         }
-                        self.set_joy(joy);
+                        attach(&mut self.router, &mut self.joy, joy);
                     }
                 }
                 Event::JoyDeviceRemoved { which, .. } => {
@@ -117,15 +117,17 @@ impl Pad {
             }
         }
     }
+}
 
-    fn set_joy(&mut self, joy: Option<Joystick>) {
-        if let Some(j) = &joy {
-            self.router.connected(Device {
-                dragonrise: vendor(j) == Some(DRAGONRISE_VENDOR),
-            });
-        }
-        self.joy = joy;
+/// Make `joy` the connected pad and tell the router. A free function, so
+/// that `poll` can call it while iterating over the event pump.
+fn attach(router: &mut Router, slot: &mut Option<Joystick>, joy: Option<Joystick>) {
+    if let Some(j) = &joy {
+        router.connected(Device {
+            dragonrise: vendor(j) == Some(DRAGONRISE_VENDOR),
+        });
     }
+    *slot = joy;
 }
 
 /// The part of an SDL event the router cares about.
