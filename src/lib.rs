@@ -10,25 +10,27 @@
 //! - reaper-pad: Button test (console)        (toggle)
 //!
 //! Layout: this file is the REAPER side (entry point, actions, executing
-//! commands). [`pad`] reads the gamepad through SDL2; the decisions it makes
-//! live in [`logic`], [`command`] and [`config`], which are plain Rust and
-//! unit-tested without a gamepad or REAPER.
+//! commands). [`pad`] reads the gamepad through SDL2; what the input means is
+//! decided by [`router`], with [`logic`], [`command`] and [`config`]. Those
+//! are plain Rust and unit-tested without a gamepad or REAPER.
 
 mod command;
 mod config;
 mod logic;
 mod pad;
+mod router;
 
 use command::{Command, StickCommand};
 use config::{Config, DEFAULT_CONFIG};
 use logic::{RUMBLE_HELLO, Stepper};
-use pad::{Pad, Sink};
+use pad::Pad;
 use reaper_low::PluginContext;
 use reaper_macros::reaper_extension_plugin;
 use reaper_medium::{
     CommandId, HookCommand, OwnedGaccelRegister, ProjectContext, Reaper, ReaperSession,
     ToggleAction, ToggleActionResult,
 };
+use router::Sink;
 use std::cell::RefCell;
 use std::error::Error;
 use std::panic::{AssertUnwindSafe, catch_unwind};

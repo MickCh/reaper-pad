@@ -5,10 +5,6 @@ in the same commit that does it.
 
 ## Structure
 
-- **Testable event routing.** `Pad` handles the SDL device *and* decides what
-  every event means (test mode, digital mode, debouncing, D-pad, sticks,
-  rumble), so none of that routing is tested. Split it into a plain-Rust
-  `Router` fed with SDL-free input events; `Pad` keeps only the device.
 - **One table of commands.** Adding a button command means editing
   `FromStr`, `Display`, `reaper_action_id` and `BUTTON_HELP` in
   `src/command.rs`. Derive all four from a single table.
