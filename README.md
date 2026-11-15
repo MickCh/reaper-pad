@@ -16,7 +16,7 @@ reaper-pad is a REAPER extension: it loads together with REAPER and calls the RE
 - **Rumble feedback** when recording starts (one long pulse) and stops (two short pulses).
 - Contact-bounce filter for old, worn pads.
 - Works in the background while REAPER has focus.
-- Config errors are reported clearly (unknown commands, typos in option names) instead of being silently ignored.
+- Config errors are reported clearly (unknown commands, typos in option names) instead of being silently ignored. Options renamed in 0.4 point to their new place.
 - reaper-pad catches its own internal errors: a bug in it disables the pad, not REAPER.
 
 ## Default layout
@@ -152,16 +152,17 @@ To find an action's ID: in the action list, right-click an action → **Copy sel
 | One press triggers twice | Increase `debounce_ms`. |
 | Scrolling goes the wrong way | Set `invert_y` in `[sticks.left]` or `[sticks.right]`. |
 | Error after editing the config | Run *Reload configuration*: the console window names the line and the problem. |
+| *“options renamed in reaper-pad 0.4”* after an update | The file is from 0.3. Move each listed option to its new place (e.g. `[sticks] left_x` → `x` in `[sticks.left]`), or delete the file to get the new default. |
 
 ## Development
 
 ```
 src/lib.rs      REAPER side: entry point, actions, executing commands (reaper-rs)
 src/pad.rs      gamepad through SDL2: devices, events, rumble
-src/router.rs   what the input means: commands, test mode, digital mode, sticks
+src/router.rs   what the input means: commands, test mode, digital mode, sticks, rumble feedback
 src/guard.rs    plugin state guarded against re-entrancy and panics
 src/logic.rs    debounce, D-pad repeat, stick curves, rumble scheduling
-src/command.rs  bindable commands
+src/command.rs  bindable commands (names and REAPER IDs generated with each enum)
 src/config.rs   configuration and validation
 config.toml     documented default configuration (embedded into the extension)
 ```
@@ -170,6 +171,7 @@ config.toml     documented default configuration (embedded into the extension)
 cargo test                            # unit tests (no gamepad needed)
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all
+cargo +1.88 check --all-targets       # minimum Rust version (also checked in CI)
 ```
 
 Hardware measurements (analog vs digital mode, axis values) and diagnostic

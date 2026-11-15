@@ -10,6 +10,9 @@ Start REAPER from a terminal to see the `[reaper-pad]` lines.
       the hello buzz about 2 s after startup.
 - [ ] A typo in the file (e.g. `[sticks.left] invert_x = true`): the console
       names the option; *Reload configuration* after fixing it starts the pad.
+- [ ] A file from 0.3 (e.g. `[sticks] left_x = "scroll_x"` plus a typo
+      elsewhere): the console lists each renamed option with its new place,
+      and the typo after "also:".
 - [ ] *Reload configuration* with a valid change: short buzz, the change
       applies (e.g. `[sticks.right] speed`).
 
