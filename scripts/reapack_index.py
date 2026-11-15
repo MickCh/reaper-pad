@@ -42,8 +42,11 @@ def changelog_for(version: str, changelog: Path) -> str:
     if not m:
         sys.exit(f"error: no '## [{version}]' section in {changelog}")
     body = m.group(1).strip()
-    # ReaPack shows plain text: "### Added" → "Added:", `code` → code
+    # ReaPack shows plain text: "### Added" → "Added:", `code` → code,
+    # **bold** / *italic* → bold / italic
     body = re.sub(r"^### (.+)$", r"\1:", body, flags=re.M)
+    body = re.sub(r"\*\*(.+?)\*\*", r"\1", body, flags=re.S)
+    body = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", body, flags=re.S)
     return body.replace("`", "")
 
 
