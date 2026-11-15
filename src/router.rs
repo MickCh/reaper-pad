@@ -57,6 +57,30 @@ pub struct Device {
 /// Raw axis values beyond this are reported in test mode.
 const TEST_AXIS_THRESHOLD: u16 = 16000;
 
+/// What the pad tells the user by rumbling: scheduled patterns, and the
+/// recording state whose changes trigger one.
+#[derive(Debug, Default)]
+struct Feedback {
+    /// Last recording state REAPER reported (`None` before the first).
+    recording: Option<bool>,
+    queue: RumbleQueue,
+}
+
+impl Feedback {
+    /// REAPER's recording state. On a change: what to log and how to rumble.
+    /// Nothing for the first report, the state REAPER was already in.
+    fn recording_changed(&mut self, on: bool) -> Option<(&'static str, Pattern)> {
+        match self.recording.replace(on) {
+            Some(was) if was != on => Some(if on {
+                ("● recording", RUMBLE_START)
+            } else {
+                ("■ recording stopped", RUMBLE_STOP)
+            }),
+            _ => None,
+        }
+    }
+}
+
 pub struct Router {
     cfg: Config,
     /// Only report button/axis numbers, don't send commands.
@@ -66,9 +90,8 @@ pub struct Router {
     hat: HatRepeat,
     axes: HashMap<Axis, AxisTracker>,
     last_tick: Instant,
-    recording: Option<bool>,
-    rumble: RumbleQueue,
     mode: ModeDetector,
+    feedback: Feedback,
 }
 
 impl Router {
@@ -81,9 +104,8 @@ impl Router {
             device: None,
             axes: HashMap::new(),
             last_tick: now,
-            recording: None,
-            rumble: RumbleQueue::default(),
             mode: ModeDetector::default(),
+            feedback: Feedback::default(),
         }
     }
 
@@ -115,19 +137,19 @@ impl Router {
         self.device = None;
         self.axes.clear();
         self.hat.set((0, 0), now);
-        self.rumble.clear();
+        self.feedback.queue.clear();
         self.mode.reset();
     }
 
     pub fn rumble(&mut self, pattern: Pattern, now: Instant) {
         if self.cfg.pad.rumble && self.device.is_some() {
-            self.rumble.schedule(pattern, now);
+            self.feedback.queue.schedule(pattern, now);
         }
     }
 
     /// Motor commands to send to the pad now.
     pub fn rumble_due(&mut self, now: Instant) -> Vec<MotorCmd> {
-        self.rumble.due(now)
+        self.feedback.queue.due(now)
     }
 
     pub fn event(&mut self, ev: InputEvent, now: Instant, sink: &mut dyn Sink) {
@@ -180,20 +202,10 @@ impl Router {
     }
 
     fn on_record(&mut self, on: bool, now: Instant, log: &mut dyn Log) {
-        if self.recording == Some(on) {
-            return;
+        if let Some((msg, pattern)) = self.feedback.recording_changed(on) {
+            log.log(msg);
+            self.rumble(pattern, now);
         }
-        // No rumble for the initial state.
-        if self.recording.is_some() {
-            if on {
-                log.log("● recording");
-                self.rumble(RUMBLE_START, now);
-            } else {
-                log.log("■ recording stopped");
-                self.rumble(RUMBLE_STOP, now);
-            }
-        }
-        self.recording = Some(on);
     }
 
     /// Watch for the digital mode of DragonRise pads (see [`ModeDetector`]).
@@ -552,6 +564,21 @@ mod tests {
         r.tick(t0 + ms(33), centred, &mut sink);
         assert_eq!(r.rumble_due(t0 + ms(33)), vec![(65535, 0, 400)]);
         assert!(sink.logs().contains(&"● recording"));
+    }
+
+    #[test]
+    fn only_changes_of_the_recording_state_count() {
+        let mut f = Feedback::default();
+        assert_eq!(f.recording_changed(true), None, "initial state");
+        assert_eq!(f.recording_changed(true), None, "no change");
+        assert_eq!(
+            f.recording_changed(false),
+            Some(("■ recording stopped", RUMBLE_STOP))
+        );
+        assert_eq!(
+            f.recording_changed(true),
+            Some(("● recording", RUMBLE_START))
+        );
     }
 
     #[test]
