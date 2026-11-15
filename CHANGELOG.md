@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-15
+
 ### Changed
 - Errors reported together with renamed 0.3 options show their line in
   the file, and the renamed options are listed in unusual files too.
