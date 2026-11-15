@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- docs/hardware.md: Art AG-16T measurements (analog vs digital mode) and
+  diagnostic scripts in scripts/diag.
+
+### Fixed
+- Release notes in ReaPack no longer show Markdown backticks.
+
 ## [0.3.0] - 2026-11-14
 
 ### Added

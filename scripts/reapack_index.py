@@ -42,8 +42,9 @@ def changelog_for(version: str, changelog: Path) -> str:
     if not m:
         sys.exit(f"error: no '## [{version}]' section in {changelog}")
     body = m.group(1).strip()
-    # "### Added" → "Added:" — ReaPack shows plain text
-    return re.sub(r"^### (.+)$", r"\1:", body, flags=re.M)
+    # ReaPack shows plain text: "### Added" → "Added:", `code` → code
+    body = re.sub(r"^### (.+)$", r"\1:", body, flags=re.M)
+    return body.replace("`", "")
 
 
 def new_index() -> ET.Element:

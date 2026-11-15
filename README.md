@@ -168,6 +168,9 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --all
 ```
 
+Hardware measurements (analog vs digital mode, axis values) and diagnostic
+scripts: [docs/hardware.md](docs/hardware.md).
+
 The input logic (debounce, D-pad repeat, stick curves, rumble scheduling, config validation) is hardware-independent and unit-tested. SDL2 lives only in `pad.rs`, and REAPER calls only in `lib.rs` (behind the `Sink` trait).
 
 Pushing a tag `v*` (with a matching `## [x.y.z]` section in `CHANGELOG.md`) builds Linux and Windows releases through GitHub Actions and adds the version to the ReaPack index (`index.xml`, via `scripts/reapack_index.py`).
