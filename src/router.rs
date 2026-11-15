@@ -59,14 +59,51 @@ const TEST_AXIS_THRESHOLD: u16 = 16000;
 
 /// What the pad tells the user by rumbling: scheduled patterns, and the
 /// recording state whose changes trigger one.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Feedback {
+    /// `[pad] rumble`.
+    enabled: bool,
+    /// A pad is connected (nothing to rumble otherwise).
+    connected: bool,
     /// Last recording state REAPER reported (`None` before the first).
     recording: Option<bool>,
     queue: RumbleQueue,
 }
 
 impl Feedback {
+    fn new(enabled: bool) -> Self {
+        Feedback {
+            enabled,
+            connected: false,
+            recording: None,
+            queue: RumbleQueue::default(),
+        }
+    }
+
+    fn set_enabled(&mut self, on: bool) {
+        self.enabled = on;
+    }
+
+    /// A pad was connected or unplugged; unplugging drops pending rumble.
+    fn set_connected(&mut self, on: bool) {
+        self.connected = on;
+        if !on {
+            self.queue.clear();
+        }
+    }
+
+    /// Rumble `pattern` from `now`, if rumble is on and a pad is connected.
+    fn rumble(&mut self, pattern: Pattern, now: Instant) {
+        if self.enabled && self.connected {
+            self.queue.schedule(pattern, now);
+        }
+    }
+
+    /// Motor commands to send to the pad now.
+    fn due(&mut self, now: Instant) -> Vec<MotorCmd> {
+        self.queue.due(now)
+    }
+
     /// REAPER's recording state. On a change: what to log and how to rumble.
     /// Nothing for the first report, the state REAPER was already in.
     fn recording_changed(&mut self, on: bool) -> Option<(&'static str, Pattern)> {
@@ -97,6 +134,7 @@ pub struct Router {
 impl Router {
     pub fn new(cfg: Config, now: Instant) -> Self {
         Router {
+            feedback: Feedback::new(cfg.pad.rumble),
             debouncer: Debouncer::new(Duration::from_millis(cfg.pad.debounce_ms)),
             hat: HatRepeat::new(Duration::from_millis(cfg.dpad.repeat_ms)),
             cfg,
@@ -105,7 +143,6 @@ impl Router {
             axes: HashMap::new(),
             last_tick: now,
             mode: ModeDetector::default(),
-            feedback: Feedback::default(),
         }
     }
 
@@ -117,6 +154,7 @@ impl Router {
             .set_interval(Duration::from_millis(cfg.dpad.repeat_ms));
         self.axes.clear();
         self.mode.reset();
+        self.feedback.set_enabled(cfg.pad.rumble);
         self.cfg = cfg;
     }
 
@@ -130,6 +168,7 @@ impl Router {
 
     pub fn connected(&mut self, device: Device) {
         self.device = Some(device);
+        self.feedback.set_connected(true);
     }
 
     /// The pad was unplugged: forget everything about its state.
@@ -137,19 +176,17 @@ impl Router {
         self.device = None;
         self.axes.clear();
         self.hat.set((0, 0), now);
-        self.feedback.queue.clear();
+        self.feedback.set_connected(false);
         self.mode.reset();
     }
 
     pub fn rumble(&mut self, pattern: Pattern, now: Instant) {
-        if self.cfg.pad.rumble && self.device.is_some() {
-            self.feedback.queue.schedule(pattern, now);
-        }
+        self.feedback.rumble(pattern, now);
     }
 
     /// Motor commands to send to the pad now.
     pub fn rumble_due(&mut self, now: Instant) -> Vec<MotorCmd> {
-        self.feedback.queue.due(now)
+        self.feedback.due(now)
     }
 
     pub fn event(&mut self, ev: InputEvent, now: Instant, sink: &mut dyn Sink) {
@@ -568,7 +605,7 @@ mod tests {
 
     #[test]
     fn only_changes_of_the_recording_state_count() {
-        let mut f = Feedback::default();
+        let mut f = Feedback::new(true);
         assert_eq!(f.recording_changed(true), None, "initial state");
         assert_eq!(f.recording_changed(true), None, "no change");
         assert_eq!(
