@@ -79,6 +79,13 @@ Fixed:
         <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.2/reaper_pad-x64.dll</source>
         <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.2/reaper_pad-x86_64.so</source>
       </version>
+      <version name="0.4.3" author="MickCh" time="2026-11-15T21:50:41Z">
+        <changelog>Changed:
+- A configuration with options from 0.3 also reports its other errors at
+  once, not only after the renamed options are fixed.</changelog>
+        <source platform="win64" file="reaper_pad-x64.dll">https://github.com/MickCh/reaper-pad/releases/download/v0.4.3/reaper_pad-x64.dll</source>
+        <source platform="linux64" file="reaper_pad-x86_64.so">https://github.com/MickCh/reaper-pad/releases/download/v0.4.3/reaper_pad-x86_64.so</source>
+      </version>
     </reapack>
   </category>
   <metadata>
