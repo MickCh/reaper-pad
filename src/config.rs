@@ -389,27 +389,46 @@ const RENAMED: [(&str, &str, &str, &str); 12] = [
     ("pad", "axis_right_y", "sticks.right", "axis_y"),
 ];
 
-/// If the file uses option names from before 0.4, say where they moved.
+/// If the file uses option names from before 0.4, say where they moved,
+/// and what else is wrong once they are in their new place (the first
+/// unknown option stops parsing, so those errors would only show up later).
 /// Only called for a file that did not parse, so it may be slow.
 fn renamed_options(text: &str) -> Option<String> {
-    let table: toml::Table = toml::from_str(text).ok()?;
-    let moved: Vec<String> = RENAMED
-        .iter()
-        .filter(|(section, old, ..)| {
-            table
-                .get(*section)
-                .and_then(toml::Value::as_table)
-                .is_some_and(|t| t.contains_key(*old))
-        })
-        .map(|(section, old, new_section, new)| {
-            format!("  [{section}] {old} → [{new_section}] {new}")
-        })
-        .collect();
-    (!moved.is_empty()).then(|| {
-        format!(
-            "options renamed in reaper-pad 0.4 (see the default config.toml):\n{}",
-            moved.join("\n")
-        )
+    let mut table: toml::Table = toml::from_str(text).ok()?;
+    let mut moved = Vec::new();
+    for &(section, old, new_section, new) in &RENAMED {
+        let Some(value) = table
+            .get_mut(section)
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|t| t.remove(old))
+        else {
+            continue;
+        };
+        moved.push(format!("  [{section}] {old} → [{new_section}] {new}"));
+        let mut target = &mut table;
+        for part in new_section.split('.') {
+            target = target
+                .entry(part)
+                .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+                .as_table_mut()?;
+        }
+        // An option already set under the new name wins.
+        target.entry(new).or_insert(value);
+    }
+    if moved.is_empty() {
+        return None;
+    }
+    let msg = format!(
+        "options renamed in reaper-pad 0.4 (see the default config.toml):\n{}",
+        moved.join("\n")
+    );
+    let rest = toml::Value::Table(table)
+        .try_into::<RawConfig>()
+        .map_err(|e| ConfigError::Syntax(e).to_string())
+        .and_then(|raw| Config::try_from(raw).map_err(|e| e.to_string()));
+    Some(match rest {
+        Ok(_) => msg,
+        Err(e) => format!("{msg}\nalso: {}", e.trim_end()),
     })
 }
 
@@ -473,11 +492,22 @@ mod tests {
             "{err}"
         );
         assert!(!err.contains("deadzone"), "{err}");
-        // Renamed options are reported first; other errors as before.
+        assert!(!err.contains("also:"), "nothing else is wrong: {err}");
+        // Other errors are reported together with the renamed options.
         let err = Config::parse("[pad]\naxis_left_x = 0\nrumbl = true\n")
             .unwrap_err()
             .to_string();
         assert!(err.contains("axis_left_x → [sticks.left] axis_x"), "{err}");
+        assert!(err.contains("also:") && err.contains("rumbl"), "{err}");
+        let err = Config::parse("[sticks]\nleft_x = \"zoom\"\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("also:") && err.contains("\"zoom\""), "{err}");
+        // The new name wins over the old one.
+        let err = Config::parse("[sticks]\nleft_x = \"zoom\"\n[sticks.left]\nx = \"zoom_x\"\n")
+            .unwrap_err()
+            .to_string();
+        assert!(!err.contains("also:"), "{err}");
         let err = Config::parse("[pad]\nrumbl = true\n")
             .unwrap_err()
             .to_string();
